@@ -139,7 +139,19 @@ function extractData(text) {
       break;
     }
   }
+/* -------------------------
+   CLIENT TYPE
+------------------------- */
 
+let client_type = "new_client";
+
+if (
+  /existing client|already applied|previous application|follow up|existing case/i.test(
+    lower
+  )
+) {
+  client_type = "existing_client";
+}
   /* -------------------------
      NAME
   ------------------------- */
