@@ -56,10 +56,14 @@ const auth = new google.auth.GoogleAuth({
    EXTRACT DATA
 =========================== */
 
-function extractData(text) {
+function extractClientData(text) {
   if (!text) return null;
 
   const lower = text.toLowerCase();
+
+  /* -------------------------
+     IGNORE WORDS
+  ------------------------- */
 
   const ignoreWords = [
     "thank",
@@ -96,23 +100,22 @@ function extractData(text) {
   );
 
   if (emailMatch) {
-    client_email =
-      emailMatch[0].toLowerCase();
+    client_email = emailMatch[0]
+      .trim()
+      .toLowerCase();
   }
 
   /* spoken email */
 
   if (!client_email) {
-    const spoken =
-      lower.match(
-        /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/i
-      );
+    const spokenEmail = lower.match(
+      /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/i
+    );
 
-    if (spoken) {
-      client_email =
-        `${spoken[1]}@${spoken[2]}.${spoken[3]}`
-          .replace(/\s/g, "")
-          .toLowerCase();
+    if (spokenEmail) {
+      client_email = `${spokenEmail[1]}@${spokenEmail[2]}.${spokenEmail[3]}`
+        .replace(/\s/g, "")
+        .toLowerCase();
     }
   }
 
@@ -123,18 +126,12 @@ function extractData(text) {
   let client_phone = "";
 
   const phones =
-    text.match(
-      /\+?\d[\d\s()-]{8,20}\d/g
-    ) || [];
+    text.match(/\+?\d[\d\s()-]{8,20}\d/g) || [];
 
-  for (const p of phones) {
-    const clean =
-      p.replace(/\D/g, "");
+  for (const phone of phones) {
+    const clean = phone.replace(/\D/g, "");
 
-    if (
-      clean.length >= 10 &&
-      clean.length <= 15
-    ) {
+    if (clean.length >= 10 && clean.length <= 15) {
       client_phone = clean;
       break;
     }
@@ -146,7 +143,7 @@ function extractData(text) {
 
   let client_name = "";
 
-  const patterns = [
+  const namePatterns = [
     /my name is\s+([a-z ]+)/i,
     /i am\s+([a-z ]+)/i,
     /this is\s+([a-z ]+)/i,
@@ -154,28 +151,20 @@ function extractData(text) {
     /name is\s+([a-z ]+)/i,
   ];
 
-  for (const pattern of patterns) {
-    const match =
-      text.match(pattern);
+  for (const pattern of namePatterns) {
+    const match = text.match(pattern);
 
     if (match?.[1]) {
-      const candidate =
-        match[1]
-          .trim()
-          .replace(/\s+/g, " ");
+      const candidate = match[1]
+        .trim()
+        .replace(/\s+/g, " ");
 
-      const invalid =
-        candidate
-          .toLowerCase()
-          .split(" ")
-          .some(word =>
-            ignoreWords.includes(word)
-          );
+      const invalid = candidate
+        .toLowerCase()
+        .split(" ")
+        .some(word => ignoreWords.includes(word));
 
-      if (
-        candidate.length > 2 &&
-        !invalid
-      ) {
+      if (candidate.length > 2 && !invalid) {
         client_name = candidate;
         break;
       }
@@ -184,27 +173,20 @@ function extractData(text) {
 
   /* fallback from email */
 
-  if (
-    !client_name &&
-    client_email
-  ) {
-    const fallback =
-      client_email
-        .split("@")[0]
-        .replace(/[0-9._-]/g, "");
+  if (!client_name && client_email) {
+    const fallback = client_email
+      .split("@")[0]
+      .replace(/[0-9._-]/g, "");
 
     if (
       fallback.length >= 3 &&
-      !ignoreWords.includes(
-        fallback.toLowerCase()
-      )
+      !ignoreWords.includes(fallback.toLowerCase())
     ) {
-      client_name =
-        fallback;
+      client_name = fallback;
     }
   }
 
-  /* capitalize */
+  /* capitalize name */
 
   client_name = client_name
     .split(" ")
@@ -222,79 +204,77 @@ function extractData(text) {
 
   let caller_country = "";
 
-  if (
-    lower.includes("india")
-  ) {
+  if (lower.includes("india")) {
     caller_country = "india";
-  }
-
-  if (
-    lower.includes("australia")
-  ) {
-    caller_country =
-      "australia";
+  } else if (lower.includes("australia")) {
+    caller_country = "australia";
   }
 
   /* -------------------------
-     INQUIRY
+     INQUIRY TYPE
   ------------------------- */
 
-  let inquiry =
-    "general inquiry";
+  let inquiry = "general inquiry";
 
-  if (
-    /pr|189|190|491|pathway/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "pr pathways";
-  } else if (
-    /work|482|186/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "work visa";
-  } else if (
-    /student/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "student visa";
-  } else if (
-    /visitor|600/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "visitor visa";
+  if (/pr|189|190|491|pathway/i.test(lower)) {
+    inquiry = "pr pathways";
+  } else if (/work|482|186/i.test(lower)) {
+    inquiry = "work visa";
+  } else if (/student/i.test(lower)) {
+    inquiry = "student visa";
+  } else if (/visitor|600/i.test(lower)) {
+    inquiry = "visitor visa";
   }
 
   /* -------------------------
      NEXT STEP
   ------------------------- */
 
-  let next_step_taken =
-    "follow_up_required";
+  let next_step_taken = "follow_up_required";
+
+  if (/callback|free callback/i.test(lower)) {
+    next_step_taken = "free_callback";
+  }
+
+  if (/paid consultation|payment|paid/i.test(lower)) {
+    next_step_taken = "paid_consultation";
+  }
+
+  /* -------------------------
+     CLIENT TYPE
+  ------------------------- */
+
+  let client_type = "new_client";
 
   if (
-    /callback|free callback/i.test(
+    /existing client|already applied|previous application|follow up|existing case/i.test(
       lower
     )
   ) {
-    next_step_taken =
-      "free_callback";
+    client_type = "existing_client";
   }
 
   if (
-    /paid consultation|payment|paid/i.test(
+    /just inquiry|checking|information only/i.test(
       lower
     )
   ) {
-    next_step_taken =
-      "paid_consultation";
+    client_type = "lead";
+  }
+
+  if (
+    client_phone &&
+    client_email
+  ) {
+    client_type = "qualified_lead";
+  }
+
+  if (
+    /consultation booked|confirmed payment|paid consultation/i.test(
+      lower
+    )
+  ) {
+    client_type = "hot_lead";
   }
 
   /* -------------------------
@@ -310,9 +290,12 @@ function extractData(text) {
     return null;
   }
 
+  /* -------------------------
+     RETURN DATA
+  ------------------------- */
+
   return {
-    caller_type:
-      "new_client",
+    client_type,
     client_name,
     client_email,
     client_phone,
