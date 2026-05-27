@@ -323,8 +323,7 @@ if (
   }
 
   return {
-    caller_type:
-      "new_client",
+    client_type,
     client_name,
     client_email,
     client_phone,
@@ -357,7 +356,7 @@ async function appendToSheet(data) {
       "RAW",
     requestBody: {
       values: [[
-        data.caller_type,
+        data.client_type,
         data.client_name,
         data.client_email,
         data.client_phone,
