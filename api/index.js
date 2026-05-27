@@ -386,104 +386,126 @@ async function getConversation(
    VERCEL API HANDLER
 =========================== */
 
-module.exports =
-  async (req, res) => {
-    try {
-      const {
-        conversation_id,
-      } = req.body;
+module.exports = async (req, res) => {
+  try {
+    // Allow POST only
+    if (req.method !== "POST") {
+      return res.status(405).json({
+        error: "Method not allowed",
+      });
+    }
 
-      if (
-        !conversation_id
-      ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "conversation_id missing",
-          });
-      }
+    console.log("Webhook Body:", req.body);
 
-      const details =
-        await getConversation(
-          conversation_id
-        );
+    /* --------------------------------
+       SUPPORT BOTH PAYLOAD FORMATS
+    -------------------------------- */
 
-      let transcript =
-        "";
+    const conversation_id =
+      req.body?.conversation_id || // Postman
+      req.body?.data?.conversation_id; // ElevenLabs webhook
 
-      if (
-        Array.isArray(
-          details.transcript
+    if (!conversation_id) {
+      return res.status(400).json({
+        error: "conversation_id missing",
+      });
+    }
+
+    console.log(
+      "Conversation ID:",
+      conversation_id
+    );
+
+    /* --------------------------------
+       GET CONVERSATION
+    -------------------------------- */
+
+    const details =
+      await getConversation(
+        conversation_id
+      );
+
+    /* --------------------------------
+       BUILD TRANSCRIPT
+    -------------------------------- */
+
+    let transcript = "";
+
+    if (
+      Array.isArray(
+        details.transcript
+      )
+    ) {
+      transcript = details.transcript
+        .filter((m) => {
+          const role = (
+            m.role ||
+            m.source ||
+            ""
+          ).toLowerCase();
+
+          return (
+            role.includes("user") ||
+            role.includes("human")
+          );
+        })
+        .map(
+          (m) =>
+            m.message ||
+            m.text ||
+            m.content ||
+            ""
         )
-      ) {
-        transcript =
-          details.transcript
-            .filter(m => {
-              const role =
-                (
-                  m.role ||
-                  m.source ||
-                  ""
-                ).toLowerCase();
+        .join(" ")
+        .trim();
+    }
 
-              return (
-                role.includes(
-                  "user"
-                ) ||
-                role.includes(
-                  "human"
-                )
-              );
-            })
-            .map(
-              m =>
-                m.message ||
-                m.text ||
-                m.content ||
-                ""
-            )
-            .join(" ")
-            .trim();
-      }
+    console.log(
+      "Transcript:",
+      transcript
+    );
 
-      console.log(
-        "Transcript:",
+    /* --------------------------------
+       EXTRACT LEAD DATA
+    -------------------------------- */
+
+    const extracted =
+      extractData(
         transcript
       );
 
-      const extracted =
-        extractData(
-          transcript
-        );
+    console.log(
+      "Extracted:",
+      extracted
+    );
 
-      console.log(
+    /* --------------------------------
+       SAVE TO GOOGLE SHEET
+    -------------------------------- */
+
+    if (extracted) {
+      await appendToSheet(
         extracted
       );
-
-      if (
-        extracted
-      ) {
-        await appendToSheet(
-          extracted
-        );
-      }
-
-      return res.json({
-        success: true,
-        data: extracted,
-      });
-    } catch (err) {
-      console.error(
-        err.response?.data ||
-          err.message
-      );
-
-      return res
-        .status(500)
-        .json({
-          error:
-            err.message,
-        });
     }
-  };
+
+    return res.status(200).json({
+      success: true,
+      conversation_id,
+      data: extracted,
+    });
+  } catch (err) {
+    console.error(
+      "ERROR:",
+      err.response?.data ||
+        err.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      error:
+        err.response?.data ||
+        err.message,
+    });
+  }
+};
