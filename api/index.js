@@ -30,16 +30,42 @@ if (!SHEET_ID) {
 /* ===========================
    GOOGLE SERVICE ACCOUNT
 =========================== */
-const credentials = JSON.parse(
-  process.env.GOOGLE_SERVICE_ACCOUNT
-);
 
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: [
-    "https://www.googleapis.com/auth/spreadsheets",
-  ],
-});
+const serviceAccountPath =
+  path.join(
+    "/tmp",
+    "service-account.json"
+  );
+
+const serviceAccountEnv =
+  process.env.GOOGLE_SERVICE_ACCOUNT;
+
+if (!serviceAccountEnv) {
+  throw new Error(
+    "GOOGLE_SERVICE_ACCOUNT env missing"
+  );
+}
+
+if (
+  !fs.existsSync(
+    serviceAccountPath
+  )
+) {
+  fs.writeFileSync(
+    serviceAccountPath,
+    serviceAccountEnv
+  );
+}
+
+const auth =
+  new google.auth.GoogleAuth({
+    keyFile:
+      serviceAccountPath,
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets",
+    ],
+  });
+
 /* ===========================
    EXTRACT DATA
 =========================== */
