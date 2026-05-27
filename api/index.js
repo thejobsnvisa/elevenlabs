@@ -244,39 +244,16 @@ function extractData(text) {
      CLIENT TYPE
   ------------------------- */
 
-  let client_type = "new_client";
 
-  if (
-    /existing client|already applied|previous application|follow up|existing case/i.test(
-      lower
-    )
-  ) {
-    client_type = "existing_client";
-  }
+let client_type = "new_client";
 
-  if (
-    /just inquiry|checking|information only/i.test(
-      lower
-    )
-  ) {
-    client_type = "lead";
-  }
-
-  if (
-    client_phone &&
-    client_email
-  ) {
-    client_type = "qualified_lead";
-  }
-
-  if (
-    /consultation booked|confirmed payment|paid consultation/i.test(
-      lower
-    )
-  ) {
-    client_type = "hot_lead";
-  }
-
+if (
+  /existing client|already applied|previous application|follow up|existing case/i.test(
+    lower
+  )
+) {
+  client_type = "existing_client";
+}
   /* -------------------------
      VALIDATION
   ------------------------- */
