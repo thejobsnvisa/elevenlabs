@@ -56,7 +56,7 @@ const auth = new google.auth.GoogleAuth({
    EXTRACT DATA
 =========================== */
 
-function extractClientData(text) {
+function extractData(text) {
   if (!text) return null;
 
   const lower = text.toLowerCase();
