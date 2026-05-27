@@ -30,41 +30,16 @@ if (!SHEET_ID) {
 /* ===========================
    GOOGLE SERVICE ACCOUNT
 =========================== */
+const credentials = JSON.parse(
+  process.env.GOOGLE_SERVICE_ACCOUNT
+);
 
-const serviceAccountPath =
-  path.join(
-    "/tmp",
-    "service-account.json"
-  );
-
-const serviceAccountEnv =
-  process.env.GOOGLE_SERVICE_ACCOUNT;
-
-if (!serviceAccountEnv) {
-  throw new Error(
-    "GOOGLE_SERVICE_ACCOUNT env missing"
-  );
-}
-
-if (
-  !fs.existsSync(
-    serviceAccountPath
-  )
-) {
-  fs.writeFileSync(
-    serviceAccountPath,
-    serviceAccountEnv
-  );
-}
-
-const auth =
-  new google.auth.GoogleAuth({
-    keyFile:
-      serviceAccountPath,
-    scopes: [
-      "https://www.googleapis.com/auth/spreadsheets",
-    ],
-  });
+const auth = new google.auth.GoogleAuth({
+  credentials,
+  scopes: [
+    "https://www.googleapis.com/auth/spreadsheets",
+  ],
+});
 
 /* ===========================
    EXTRACT DATA
@@ -281,39 +256,39 @@ function extractData(text) {
   }
 
   /* -------------------------
-     INQUIRY
+     migration_intent_summary
   ------------------------- */
 
-  let inquiry =
-    "general inquiry";
+  let migration_intent_summary =
+    "general migration_intent_summary";
 
   if (
     /pr|189|190|491|pathway/i.test(
       lower
     )
   ) {
-    inquiry =
+    migration_intent_summary =
       "pr pathways";
   } else if (
     /work|482|186/i.test(
       lower
     )
   ) {
-    inquiry =
+    migration_intent_summary =
       "work visa";
   } else if (
     /student/i.test(
       lower
     )
   ) {
-    inquiry =
+    migration_intent_summary =
       "student visa";
   } else if (
     /visitor|600/i.test(
       lower
     )
   ) {
-    inquiry =
+    migration_intent_summary =
       "visitor visa";
   }
 
@@ -360,7 +335,7 @@ function extractData(text) {
     client_name,
     client_email,
     client_phone,
-    inquiry,
+    migration_intent_summary,
     next_step_taken,
     caller_country,
   };
@@ -370,44 +345,39 @@ function extractData(text) {
    GOOGLE SHEETS
 =========================== */
 
-async function appendToSheet(
-  data
-) {
-  const client =
-    await auth.getClient();
+async function appendToSheet(data) {
 
-  const sheets =
-    google.sheets({
-      version: "v4",
-      auth: client,
-    });
+  const client = await auth.getClient();
 
-  await sheets.spreadsheets.values.append(
-    {
-      spreadsheetId:
-        SHEET_ID,
-      range: "Sheet1!A:G",
-      valueInputOption:
-        "RAW",
-      requestBody: {
-        values: [[
-          data.client_type,
-          data.client_name,
-          data.client_email,
-          data.client_phone,
-          data.inquiry,
-          data.next_step_taken,
-          data.caller_country,
-        ]],
-      },
-    }
-  );
+  const sheets = google.sheets({
+    version: "v4",
+    auth: client,
+  });
 
-  console.log(
-    "✅ Saved to Google Sheet"
-  );
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+
+    range: "Sheet1!A:G",
+
+    valueInputOption: "USER_ENTERED",
+
+    insertDataOption: "INSERT_ROWS",
+
+    requestBody: {
+      values: [[
+        data.client_type,
+        data.client_name,
+        data.client_email,
+        data.client_phone,
+        data.migration_intent_summary,
+        data.next_step_taken,
+        data.caller_country,
+      ]],
+    },
+  });
+
+  console.log("✅ Saved to Google Sheet");
 }
-
 /* ===========================
    ELEVENLABS API
 =========================== */
@@ -493,9 +463,9 @@ module.exports =
             body.client_phone ||
             "",
 
-          inquiry:
-            body.inquiry ||
-            "general inquiry",
+          migration_intent_summary:
+            body.migration_intent_summary ||
+            "general migration_intent_summary",
 
           next_step_taken:
             body.next_step_taken ||
