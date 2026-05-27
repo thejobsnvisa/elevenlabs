@@ -9,25 +9,33 @@ const { google } = require("googleapis");
    ENV
 =========================== */
 
-const API_KEY = process.env.ELEVENLABS_API_KEY;
-const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const API_KEY =
+  process.env.ELEVENLABS_API_KEY;
+
+const SHEET_ID =
+  process.env.GOOGLE_SHEET_ID;
 
 if (!API_KEY) {
-  throw new Error("ELEVENLABS_API_KEY missing");
+  throw new Error(
+    "ELEVENLABS_API_KEY missing"
+  );
 }
 
 if (!SHEET_ID) {
-  throw new Error("GOOGLE_SHEET_ID missing");
+  throw new Error(
+    "GOOGLE_SHEET_ID missing"
+  );
 }
 
 /* ===========================
    GOOGLE SERVICE ACCOUNT
 =========================== */
 
-const serviceAccountPath = path.join(
-  "/tmp",
-  "service-account.json"
-);
+const serviceAccountPath =
+  path.join(
+    "/tmp",
+    "service-account.json"
+  );
 
 const serviceAccountEnv =
   process.env.GOOGLE_SERVICE_ACCOUNT;
@@ -38,19 +46,25 @@ if (!serviceAccountEnv) {
   );
 }
 
-if (!fs.existsSync(serviceAccountPath)) {
+if (
+  !fs.existsSync(
+    serviceAccountPath
+  )
+) {
   fs.writeFileSync(
     serviceAccountPath,
     serviceAccountEnv
   );
 }
 
-const auth = new google.auth.GoogleAuth({
-  keyFile: serviceAccountPath,
-  scopes: [
-    "https://www.googleapis.com/auth/spreadsheets",
-  ],
-});
+const auth =
+  new google.auth.GoogleAuth({
+    keyFile:
+      serviceAccountPath,
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets",
+    ],
+  });
 
 /* ===========================
    EXTRACT DATA
@@ -59,7 +73,8 @@ const auth = new google.auth.GoogleAuth({
 function extractData(text) {
   if (!text) return null;
 
-  const lower = text.toLowerCase();
+  const lower =
+    text.toLowerCase();
 
   const ignoreWords = [
     "thank",
@@ -91,9 +106,10 @@ function extractData(text) {
 
   let client_email = "";
 
-  const emailMatch = text.match(
-    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-  );
+  const emailMatch =
+    text.match(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+    );
 
   if (emailMatch) {
     client_email =
@@ -135,23 +151,28 @@ function extractData(text) {
       clean.length >= 10 &&
       clean.length <= 15
     ) {
-      client_phone = clean;
+      client_phone =
+        clean;
       break;
     }
   }
-/* -------------------------
-   CLIENT TYPE
-------------------------- */
 
-let client_type = "new_client";
+  /* -------------------------
+     CLIENT TYPE
+  ------------------------- */
 
-if (
-  /existing client|already applied|previous application|follow up|existing case/i.test(
-    lower
-  )
-) {
-  client_type = "existing_client";
-}
+  let client_type =
+    "new_client";
+
+  if (
+    /existing client|already applied|previous application|follow up|existing case/i.test(
+      lower
+    )
+  ) {
+    client_type =
+      "existing_client";
+  }
+
   /* -------------------------
      NAME
   ------------------------- */
@@ -181,14 +202,18 @@ if (
           .toLowerCase()
           .split(" ")
           .some(word =>
-            ignoreWords.includes(word)
+            ignoreWords.includes(
+              word
+            )
           );
 
       if (
-        candidate.length > 2 &&
+        candidate.length >
+          2 &&
         !invalid
       ) {
-        client_name = candidate;
+        client_name =
+          candidate;
         break;
       }
     }
@@ -203,10 +228,14 @@ if (
     const fallback =
       client_email
         .split("@")[0]
-        .replace(/[0-9._-]/g, "");
+        .replace(
+          /[0-9._-]/g,
+          ""
+        );
 
     if (
-      fallback.length >= 3 &&
+      fallback.length >=
+        3 &&
       !ignoreWords.includes(
         fallback.toLowerCase()
       )
@@ -218,15 +247,16 @@ if (
 
   /* capitalize */
 
-  client_name = client_name
-    .split(" ")
-    .filter(Boolean)
-    .map(
-      word =>
-        word.charAt(0).toUpperCase() +
-        word.slice(1)
-    )
-    .join(" ");
+  client_name =
+    client_name
+      .split(" ")
+      .filter(Boolean)
+      .map(
+        word =>
+          word.charAt(0).toUpperCase() +
+          word.slice(1)
+      )
+      .join(" ");
 
   /* -------------------------
      COUNTRY
@@ -237,11 +267,14 @@ if (
   if (
     lower.includes("india")
   ) {
-    caller_country = "india";
+    caller_country =
+      "india";
   }
 
   if (
-    lower.includes("australia")
+    lower.includes(
+      "australia"
+    )
   ) {
     caller_country =
       "australia";
@@ -337,7 +370,9 @@ if (
    GOOGLE SHEETS
 =========================== */
 
-async function appendToSheet(data) {
+async function appendToSheet(
+  data
+) {
   const client =
     await auth.getClient();
 
@@ -347,28 +382,29 @@ async function appendToSheet(data) {
       auth: client,
     });
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId:
-      SHEET_ID,
-    range:
-      "Sheet1!A:G",
-    valueInputOption:
-      "RAW",
-    requestBody: {
-      values: [[
-        data.client_type,
-        data.client_name,
-        data.client_email,
-        data.client_phone,
-        data.inquiry,
-        data.next_step_taken,
-        data.caller_country,
-      ]],
-    },
-  });
+  await sheets.spreadsheets.values.append(
+    {
+      spreadsheetId:
+        SHEET_ID,
+      range: "Sheet1!A:G",
+      valueInputOption:
+        "RAW",
+      requestBody: {
+        values: [[
+          data.client_type,
+          data.client_name,
+          data.client_email,
+          data.client_phone,
+          data.inquiry,
+          data.next_step_taken,
+          data.caller_country,
+        ]],
+      },
+    }
+  );
 
   console.log(
-    "✅ Saved to sheet"
+    "✅ Saved to Google Sheet"
   );
 }
 
@@ -393,3 +429,168 @@ async function getConversation(
   return res.data;
 }
 
+/* ===========================
+   MAIN API HANDLER
+=========================== */
+
+module.exports =
+  async function handler(
+    req,
+    res
+  ) {
+    /* -------------------------
+       METHOD CHECK
+    ------------------------- */
+
+    if (
+      req.method !== "POST"
+    ) {
+      return res
+        .status(405)
+        .json({
+          success: false,
+          error:
+            "Method Not Allowed",
+        });
+    }
+
+    try {
+      console.log(
+        "Incoming body:",
+        req.body
+      );
+
+      const body =
+        req.body;
+
+      let extractedData =
+        null;
+
+      /* -------------------------
+         OPTION 1
+         DIRECT DATA
+      ------------------------- */
+
+      if (
+        body.client_name ||
+        body.client_email ||
+        body.client_phone
+      ) {
+        extractedData = {
+          client_type:
+            body.client_type ||
+            "new_client",
+
+          client_name:
+            body.client_name ||
+            "",
+
+          client_email:
+            body.client_email ||
+            "",
+
+          client_phone:
+            body.client_phone ||
+            "",
+
+          inquiry:
+            body.inquiry ||
+            "general inquiry",
+
+          next_step_taken:
+            body.next_step_taken ||
+            "follow_up_required",
+
+          caller_country:
+            body.caller_country ||
+            "",
+        };
+      }
+
+      /* -------------------------
+         OPTION 2
+         CONVERSATION ID
+      ------------------------- */
+
+      else if (
+        body.conversation_id
+      ) {
+        const convo =
+          await getConversation(
+            body.conversation_id
+          );
+
+        console.log(
+          "Conversation fetched"
+        );
+
+        const transcript =
+          convo.transcript
+            ?.map(
+              item =>
+                item.message
+            )
+            .join(" ") || "";
+
+        console.log(
+          "Transcript:",
+          transcript
+        );
+
+        extractedData =
+          extractData(
+            transcript
+          );
+      }
+
+      /* -------------------------
+         NO DATA
+      ------------------------- */
+
+      if (
+        !extractedData
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error:
+              "No valid lead data found",
+          });
+      }
+
+      /* -------------------------
+         SAVE TO SHEET
+      ------------------------- */
+
+      await appendToSheet(
+        extractedData
+      );
+
+      /* -------------------------
+         SUCCESS
+      ------------------------- */
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message:
+            "Lead saved successfully",
+          data: extractedData,
+        });
+    } catch (error) {
+      console.error(
+        "API Error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          error:
+            error.message,
+        });
+    }
+  };
