@@ -1,7 +1,6 @@
 require("dotenv").config();
 
 const fs = require("fs");
-const path = require("path");
 const axios = require("axios");
 const { google } = require("googleapis");
 
@@ -9,62 +8,85 @@ const { google } = require("googleapis");
    ENV
 =========================== */
 
-const API_KEY =
-  process.env.ELEVENLABS_API_KEY;
+const API_KEY = process.env.ELEVENLABS_API_KEY;
+const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-const SHEET_ID =
-  process.env.GOOGLE_SHEET_ID;
+/* ===========================
+   GOOGLE AUTH
+=========================== */
 
-if (!API_KEY) {
-  throw new Error(
-    "ELEVENLABS_API_KEY missing"
-  );
+const auth = new google.auth.GoogleAuth({
+  keyFile: "service-account.json",
+  scopes: [
+    "https://www.googleapis.com/auth/spreadsheets",
+  ],
+});
+
+/* ===========================
+   VERCEL SAFE FILE
+=========================== */
+
+const FILE_PATH =
+  "/tmp/processed.json";
+
+function getProcessedIds() {
+  try {
+    return JSON.parse(
+      fs.readFileSync(
+        FILE_PATH,
+        "utf8"
+      )
+    );
+  } catch {
+    return [];
+  }
 }
 
-if (!SHEET_ID) {
-  throw new Error(
-    "GOOGLE_SHEET_ID missing"
+function saveProcessed(ids) {
+  fs.writeFileSync(
+    FILE_PATH,
+    JSON.stringify(ids)
   );
 }
 
 /* ===========================
-   GOOGLE SERVICE ACCOUNT
+   ELEVENLABS API
 =========================== */
 
-const serviceAccountPath =
-  path.join(
-    "/tmp",
-    "service-account.json"
-  );
+async function getConversations() {
+  const res =
+    await axios.get(
+      "https://api.elevenlabs.io/v1/convai/conversations",
+      {
+        headers: {
+          "xi-api-key":
+            API_KEY,
+        },
+      }
+    );
 
-const serviceAccountEnv =
-  process.env.GOOGLE_SERVICE_ACCOUNT;
-
-if (!serviceAccountEnv) {
-  throw new Error(
-    "GOOGLE_SERVICE_ACCOUNT env missing"
+  return (
+    res.data.conversations ||
+    []
   );
 }
 
-if (
-  !fs.existsSync(
-    serviceAccountPath
-  )
+async function getConversationDetails(
+  id
 ) {
-  fs.writeFileSync(
-    serviceAccountPath,
-    serviceAccountEnv
-  );
-}
+  const res =
+    await axios.get(
+      `https://api.elevenlabs.io/v1/convai/conversations/${id}`,
+      {
+        headers: {
+          "xi-api-key":
+            API_KEY,
+        },
+      }
+    );
 
-const auth =
-  new google.auth.GoogleAuth({
-    keyFile:
-      serviceAccountPath,
-    scopes: [
-      "https://www.googleapis.com/auth/spreadsheets",
-    ],
-  });
+  return res.data;
+}
 
 /* ===========================
    EXTRACT DATA
@@ -76,44 +98,57 @@ function extractData(text) {
   const lower =
     text.toLowerCase();
 
-  const ignoreWords = [
-    "thank",
-    "thanks",
-    "yeah",
-    "yes",
-    "hello",
-    "hi",
-    "interested",
-    "callback",
-    "visa",
-    "work",
-    "student",
-    "pr",
-    "india",
-    "australia",
-    "client",
-    "agent",
-    "growmore",
-    "immigration",
-    "temporary",
-    "correct",
-    "details",
-  ];
+  /* -------------------------
+     BAD WORDS
+  ------------------------- */
+
+  const ignoreWords =
+    new Set([
+      "thank",
+      "thanks",
+      "yeah",
+      "yes",
+      "hello",
+      "hi",
+      "temporary",
+      "australian",
+      "interested",
+      "interested for",
+      "interested in",
+      "callback",
+      "visa",
+      "work",
+      "student",
+      "pr",
+      "india",
+      "australia",
+      "client",
+      "agent",
+      "growmore",
+      "immigration",
+      "correct",
+      "details",
+      "granari",
+      "hearing",
+      "the correct",
+      "the correct details",
+    ]);
 
   /* -------------------------
      EMAIL
   ------------------------- */
 
-  let client_email = "";
+  let client_email =
+    "";
 
-  const emailMatch =
+  const email =
     text.match(
       /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
     );
 
-  if (emailMatch) {
+  if (email) {
     client_email =
-      emailMatch[0].toLowerCase();
+      email[0].toLowerCase();
   }
 
   /* spoken email */
@@ -136,20 +171,26 @@ function extractData(text) {
      PHONE
   ------------------------- */
 
-  let client_phone = "";
+  let client_phone =
+    "";
 
   const phones =
     text.match(
       /\+?\d[\d\s()-]{8,20}\d/g
     ) || [];
 
-  for (const p of phones) {
+  for (const phone of phones) {
     const clean =
-      p.replace(/\D/g, "");
+      phone.replace(
+        /\D/g,
+        ""
+      );
 
     if (
-      clean.length >= 10 &&
-      clean.length <= 15
+      clean.length >=
+        10 &&
+      clean.length <=
+        15
     ) {
       client_phone =
         clean;
@@ -158,59 +199,37 @@ function extractData(text) {
   }
 
   /* -------------------------
-     CLIENT TYPE
-  ------------------------- */
-
-  let client_type =
-    "new_client";
-
-  if (
-    /existing client|already applied|previous application|follow up|existing case/i.test(
-      lower
-    )
-  ) {
-    client_type =
-      "existing_client";
-  }
-
-  /* -------------------------
      NAME
   ------------------------- */
 
-  let client_name = "";
+  let client_name =
+    "";
 
   const patterns = [
-    /my name is\s+([a-z ]+)/i,
-    /i am\s+([a-z ]+)/i,
-    /this is\s+([a-z ]+)/i,
-    /name\s*:\s*([a-z ]+)/i,
-    /name is\s+([a-z ]+)/i,
+    /name\s*:\s*([A-Za-z ]+)/i,
+    /my name is\s+([A-Za-z ]+)/i,
+    /this is\s+([A-Za-z ]+)/i,
+    /i am\s+([A-Za-z ]+)/i,
+    /name:\s*([A-Za-z ]+)/i,
   ];
 
   for (const pattern of patterns) {
     const match =
-      text.match(pattern);
+      text.match(
+        pattern
+      );
 
-    if (match?.[1]) {
+    if (
+      match?.[1]
+    ) {
       const candidate =
         match[1]
-          .trim()
-          .replace(/\s+/g, " ");
-
-      const invalid =
-        candidate
-          .toLowerCase()
-          .split(" ")
-          .some(word =>
-            ignoreWords.includes(
-              word
-            )
-          );
+          .trim();
 
       if (
-        candidate.length >
-          2 &&
-        !invalid
+        !ignoreWords.has(
+          candidate.toLowerCase()
+        )
       ) {
         client_name =
           candidate;
@@ -236,49 +255,57 @@ function extractData(text) {
     if (
       fallback.length >=
         3 &&
-      !ignoreWords.includes(
+      !ignoreWords.has(
         fallback.toLowerCase()
       )
     ) {
       client_name =
-        fallback;
+        fallback
+          .charAt(0)
+          .toUpperCase() +
+        fallback.slice(
+          1
+        );
     }
   }
-
-  /* capitalize */
-
-  client_name =
-    client_name
-      .split(" ")
-      .filter(Boolean)
-      .map(
-        word =>
-          word.charAt(0).toUpperCase() +
-          word.slice(1)
-      )
-      .join(" ");
 
   /* -------------------------
      COUNTRY
   ------------------------- */
 
-  let caller_country = "";
+  let caller_country =
+    "";
 
-  if (
-    lower.includes("india")
-  ) {
-    caller_country =
-      "india";
+  const countries =
+    [
+      "india",
+      "australia",
+      "canada",
+      "usa",
+      "uk",
+      "uae",
+    ];
+
+  for (const c of countries) {
+    if (
+      lower.includes(c)
+    ) {
+      caller_country =
+        c;
+      break;
+    }
   }
 
-  if (
-    lower.includes(
-      "australia"
+  /* -------------------------
+     CLIENT TYPE
+  ------------------------- */
+
+  const caller_type =
+    /existing|follow up|follow-up/i.test(
+      lower
     )
-  ) {
-    caller_country =
-      "australia";
-  }
+      ? "existing_client"
+      : "new_client";
 
   /* -------------------------
      INQUIRY
@@ -295,19 +322,19 @@ function extractData(text) {
     inquiry =
       "pr pathways";
   } else if (
-    /work|482|186/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "work visa";
-  } else if (
     /student/i.test(
       lower
     )
   ) {
     inquiry =
       "student visa";
+  } else if (
+    /work|482|186/i.test(
+      lower
+    )
+  ) {
+    inquiry =
+      "work visa";
   } else if (
     /visitor|600/i.test(
       lower
@@ -325,21 +352,19 @@ function extractData(text) {
     "follow_up_required";
 
   if (
-    /callback|free callback/i.test(
-      lower
-    )
-  ) {
-    next_step_taken =
-      "free_callback";
-  }
-
-  if (
     /paid consultation|payment|paid/i.test(
       lower
     )
   ) {
     next_step_taken =
       "paid_consultation";
+  } else if (
+    /free callback|callback/i.test(
+      lower
+    )
+  ) {
+    next_step_taken =
+      "free_callback";
   }
 
   /* -------------------------
@@ -351,12 +376,11 @@ function extractData(text) {
     client_email ||
     client_phone;
 
-  if (!hasLead) {
+  if (!hasLead)
     return null;
-  }
 
   return {
-    client_type,
+    caller_type,
     client_name,
     client_email,
     client_phone,
@@ -378,7 +402,8 @@ async function appendToSheet(
 
   const sheets =
     google.sheets({
-      version: "v4",
+      version:
+        "v4",
       auth: client,
     });
 
@@ -386,12 +411,13 @@ async function appendToSheet(
     {
       spreadsheetId:
         SHEET_ID,
-      range: "Sheet1!A:G",
+      range:
+        "Sheet1!A:G",
       valueInputOption:
         "RAW",
       requestBody: {
         values: [[
-          data.client_type,
+          data.caller_type,
           data.client_name,
           data.client_email,
           data.client_phone,
@@ -404,193 +430,138 @@ async function appendToSheet(
   );
 
   console.log(
-    "✅ Saved to Google Sheet"
+    "✅ Saved to sheet"
   );
 }
 
 /* ===========================
-   ELEVENLABS API
+   MAIN LOGIC
 =========================== */
 
-async function getConversation(
-  conversationId
-) {
-  const res =
-    await axios.get(
-      `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
-      {
-        headers: {
-          "xi-api-key":
-            API_KEY,
-        },
-      }
+async function checkConversations() {
+  const processedIds =
+    new Set(
+      getProcessedIds()
     );
 
-  return res.data;
+  const conversations =
+    await getConversations();
+
+  for (const convo of conversations) {
+    const id =
+      convo.conversation_id;
+
+    if (
+      !id ||
+      processedIds.has(
+        id
+      )
+    ) {
+      continue;
+    }
+
+    const details =
+      await getConversationDetails(
+        id
+      );
+
+    let transcript =
+      "";
+
+    if (
+      Array.isArray(
+        details.transcript
+      )
+    ) {
+      transcript =
+        details.transcript
+          .filter(m => {
+            const role =
+              (
+                m.role ||
+                ""
+              ).toLowerCase();
+
+            return (
+              role.includes(
+                "user"
+              ) ||
+              role.includes(
+                "human"
+              )
+            );
+          })
+          .map(
+            m =>
+              m.message ||
+              m.text ||
+              ""
+          )
+          .join(" ");
+    }
+
+    if (!transcript)
+      continue;
+
+    const extracted =
+      extractData(
+        transcript
+      );
+
+    console.log(
+      extracted
+    );
+
+    if (
+      extracted
+    ) {
+      await appendToSheet(
+        extracted
+      );
+
+      processedIds.add(
+        id
+      );
+
+      saveProcessed([
+        ...processedIds,
+      ]);
+
+      console.log(
+        "✅ Saved:",
+        id
+      );
+    }
+  }
 }
 
 /* ===========================
-   MAIN API HANDLER
+   VERCEL HANDLER
 =========================== */
 
 module.exports =
-  async function handler(
+  async (
     req,
     res
-  ) {
-    /* -------------------------
-       METHOD CHECK
-    ------------------------- */
-
-    if (
-      req.method !== "POST"
-    ) {
-      return res
-        .status(405)
-        .json({
-          success: false,
-          error:
-            "Method Not Allowed",
-        });
-    }
-
+  ) => {
     try {
-      console.log(
-        "Incoming body:",
-        req.body
-      );
+      await checkConversations();
 
-      const body =
-        req.body;
-
-      let extractedData =
-        null;
-
-      /* -------------------------
-         OPTION 1
-         DIRECT DATA
-      ------------------------- */
-
-      if (
-        body.client_name ||
-        body.client_email ||
-        body.client_phone
-      ) {
-        extractedData = {
-          client_type:
-            body.client_type ||
-            "new_client",
-
-          client_name:
-            body.client_name ||
-            "",
-
-          client_email:
-            body.client_email ||
-            "",
-
-          client_phone:
-            body.client_phone ||
-            "",
-
-          inquiry:
-            body.inquiry ||
-            "general inquiry",
-
-          next_step_taken:
-            body.next_step_taken ||
-            "follow_up_required",
-
-          caller_country:
-            body.caller_country ||
-            "",
-        };
-      }
-
-      /* -------------------------
-         OPTION 2
-         CONVERSATION ID
-      ------------------------- */
-
-      else if (
-        body.conversation_id
-      ) {
-        const convo =
-          await getConversation(
-            body.conversation_id
-          );
-
-        console.log(
-          "Conversation fetched"
-        );
-
-        const transcript =
-          convo.transcript
-            ?.map(
-              item =>
-                item.message
-            )
-            .join(" ") || "";
-
-        console.log(
-          "Transcript:",
-          transcript
-        );
-
-        extractedData =
-          extractData(
-            transcript
-          );
-      }
-
-      /* -------------------------
-         NO DATA
-      ------------------------- */
-
-      if (
-        !extractedData
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error:
-              "No valid lead data found",
-          });
-      }
-
-      /* -------------------------
-         SAVE TO SHEET
-      ------------------------- */
-
-      await appendToSheet(
-        extractedData
-      );
-
-      /* -------------------------
-         SUCCESS
-      ------------------------- */
-
-      return res
-        .status(200)
-        .json({
+      return res.json(
+        {
           success: true,
           message:
-            "Lead saved successfully",
-          data: extractedData,
-        });
-    } catch (error) {
-      console.error(
-        "API Error:",
-        error
+            "done",
+        }
       );
-
+    } catch (
+      err
+    ) {
       return res
         .status(500)
         .json({
-          success: false,
           error:
-            error.message,
+            err.message,
         });
     }
   };
