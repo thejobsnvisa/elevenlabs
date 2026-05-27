@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const fs = require("fs");
+const path = require("path");
 const axios = require("axios");
 const { google } = require("googleapis");
 
@@ -12,227 +13,91 @@ const API_KEY = process.env.ELEVENLABS_API_KEY;
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 
 /* ===========================
-   GOOGLE AUTH
+   GOOGLE SERVICE ACCOUNT
 =========================== */
 
+const serviceAccountPath = path.join(
+  __dirname,
+  "service-account.json"
+);
+
+const serviceAccountEnv =
+  process.env.GOOGLE_SERVICE_ACCOUNT;
+
+if (!serviceAccountEnv) {
+  throw new Error(
+    "GOOGLE_SERVICE_ACCOUNT env variable missing"
+  );
+}
+
+if (!fs.existsSync(serviceAccountPath)) {
+  fs.writeFileSync(
+    serviceAccountPath,
+    serviceAccountEnv
+  );
+}
+
 const auth = new google.auth.GoogleAuth({
-  keyFile: "service-account.json",
+  keyFile: serviceAccountPath,
   scopes: [
     "https://www.googleapis.com/auth/spreadsheets",
   ],
 });
 
-/* ===========================
-   VERCEL SAFE FILE
-=========================== */
-
-const FILE_PATH =
-  "/tmp/processed.json";
-
-function getProcessedIds() {
-  try {
-    return JSON.parse(
-      fs.readFileSync(
-        FILE_PATH,
-        "utf8"
-      )
-    );
-  } catch {
-    return [];
-  }
-}
-
-function saveProcessed(ids) {
-  fs.writeFileSync(
-    FILE_PATH,
-    JSON.stringify(ids)
-  );
-}
-
-/* ===========================
-   ELEVENLABS API
-=========================== */
-
-async function getConversations() {
-  const res =
-    await axios.get(
-      "https://api.elevenlabs.io/v1/convai/conversations",
-      {
-        headers: {
-          "xi-api-key":
-            API_KEY,
-        },
-      }
-    );
-
-  return (
-    res.data.conversations ||
-    []
-  );
-}
-
-async function getConversationDetails(
-  id
-) {
-  const res =
-    await axios.get(
-      `https://api.elevenlabs.io/v1/convai/conversations/${id}`,
-      {
-        headers: {
-          "xi-api-key":
-            API_KEY,
-        },
-      }
-    );
-
-  return res.data;
-}
-
-/* ===========================
+/* ==========================
    EXTRACT DATA
-=========================== */
+========================== */
 
 function extractData(text) {
   if (!text) return null;
 
-  const lower =
-    text.toLowerCase();
+  const lower = text.toLowerCase();
 
-  /* -------------------------
-     BAD WORDS
-  ------------------------- */
+  /* NAME */
 
-  const ignoreWords =
-    new Set([
-      "thank",
-      "thanks",
-      "yeah",
-      "yes",
-      "hello",
-      "hi",
-      "temporary",
-      "australian",
-      "interested",
-      "interested for",
-      "interested in",
-      "callback",
-      "visa",
-      "work",
-      "student",
-      "pr",
-      "india",
-      "australia",
-      "client",
-      "agent",
-      "growmore",
-      "immigration",
-      "correct",
-      "details",
-      "granari",
-      "hearing",
-      "the correct",
-      "the correct details",
-    ]);
+  let client_name = "";
 
-  /* -------------------------
-     EMAIL
-  ------------------------- */
-
-  let client_email =
-    "";
-
-  const email =
-    text.match(
-      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-    );
-
-  if (email) {
-    client_email =
-      email[0].toLowerCase();
-  }
-
-  /* spoken email */
-
-  if (!client_email) {
-    const spoken =
-      lower.match(
-        /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/i
-      );
-
-    if (spoken) {
-      client_email =
-        `${spoken[1]}@${spoken[2]}.${spoken[3]}`
-          .replace(/\s/g, "")
-          .toLowerCase();
-    }
-  }
-
-  /* -------------------------
-     PHONE
-  ------------------------- */
-
-  let client_phone =
-    "";
-
-  const phones =
-    text.match(
-      /\+?\d[\d\s()-]{8,20}\d/g
-    ) || [];
-
-  for (const phone of phones) {
-    const clean =
-      phone.replace(
-        /\D/g,
-        ""
-      );
-
-    if (
-      clean.length >=
-        10 &&
-      clean.length <=
-        15
-    ) {
-      client_phone =
-        clean;
-      break;
-    }
-  }
-
-  /* -------------------------
-     NAME
-  ------------------------- */
-
-  let client_name =
-    "";
-
-  const patterns = [
-    /name\s*:\s*([A-Za-z ]+)/i,
-    /my name is\s+([A-Za-z ]+)/i,
-    /this is\s+([A-Za-z ]+)/i,
-    /i am\s+([A-Za-z ]+)/i,
-    /name:\s*([A-Za-z ]+)/i,
+  const ignoreWords = [
+    "thank",
+    "thanks",
+    "yeah",
+    "yes",
+    "hello",
+    "hi",
+    "interested",
+    "callback",
+    "visa",
+    "work",
+    "student",
+    "pr",
+    "india",
+    "australia",
+    "client",
+    "agent",
+    "growmore",
+    "immigration",
   ];
 
-  for (const pattern of patterns) {
-    const match =
-      text.match(
-        pattern
-      );
+  const patterns = [
+    /name[:\s]+([A-Za-z ]+)/i,
+    /my name is ([A-Za-z ]+)/i,
+    /this is ([A-Za-z ]+)/i,
+    /i am ([A-Za-z ]+)/i,
+  ];
 
-    if (
-      match?.[1]
-    ) {
-      const candidate =
-        match[1]
-          .trim();
+  for (const p of patterns) {
+    const m = text.match(p);
+
+    if (m?.[1]) {
+      const candidate = m[1].trim();
 
       if (
-        !ignoreWords.has(
+        candidate.length > 2 &&
+        !ignoreWords.includes(
           candidate.toLowerCase()
         )
       ) {
-        client_name =
-          candidate;
+        client_name = candidate;
         break;
       }
     }
@@ -240,116 +105,82 @@ function extractData(text) {
 
   /* fallback from email */
 
-  if (
-    !client_name &&
-    client_email
-  ) {
-    const fallback =
-      client_email
-        .split("@")[0]
-        .replace(
-          /[0-9._-]/g,
-          ""
-        );
+  let client_email = "";
 
-    if (
-      fallback.length >=
-        3 &&
-      !ignoreWords.has(
-        fallback.toLowerCase()
-      )
-    ) {
+  const email =
+    text.match(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+    );
+
+  if (email) {
+    client_email = email[0].toLowerCase();
+
+    if (!client_name) {
       client_name =
-        fallback
-          .charAt(0)
-          .toUpperCase() +
-        fallback.slice(
-          1
-        );
+        client_email
+          .split("@")[0]
+          .replace(/[0-9._-]/g, "");
     }
   }
 
-  /* -------------------------
-     COUNTRY
-  ------------------------- */
+  /* phone */
 
-  let caller_country =
-    "";
+  let client_phone = "";
 
-  const countries =
-    [
-      "india",
-      "australia",
-      "canada",
-      "usa",
-      "uk",
-      "uae",
-    ];
+  const phones =
+    text.match(
+      /\+?\d[\d\s()-]{8,20}\d/g
+    ) || [];
 
-  for (const c of countries) {
+  for (const p of phones) {
+    const clean = p.replace(/\D/g, "");
+
     if (
-      lower.includes(c)
+      clean.length >= 10 &&
+      clean.length <= 15
     ) {
-      caller_country =
-        c;
+      client_phone = clean;
       break;
     }
   }
 
-  /* -------------------------
-     CLIENT TYPE
-  ------------------------- */
+  /* country */
 
-  const caller_type =
-    /existing|follow up|follow-up/i.test(
-      lower
-    )
-      ? "existing_client"
-      : "new_client";
+  let caller_country = "";
 
-  /* -------------------------
-     INQUIRY
-  ------------------------- */
-
-  let inquiry =
-    "general inquiry";
-
-  if (
-    /pr|189|190|491|pathway/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "pr pathways";
-  } else if (
-    /student/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "student visa";
-  } else if (
-    /work|482|186/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "work visa";
-  } else if (
-    /visitor|600/i.test(
-      lower
-    )
-  ) {
-    inquiry =
-      "visitor visa";
+  if (lower.includes("india")) {
+    caller_country = "india";
   }
 
-  /* -------------------------
-     NEXT STEP
-  ------------------------- */
+  if (lower.includes("australia")) {
+    caller_country = "australia";
+  }
+
+  /* inquiry */
+
+  let inquiry = "general inquiry";
+
+  if (/pr|189|190|491|pathway/i.test(lower)) {
+    inquiry = "pr pathways";
+  } else if (/work|482|186/i.test(lower)) {
+    inquiry = "work visa";
+  } else if (/student/i.test(lower)) {
+    inquiry = "student visa";
+  } else if (/visitor|600/i.test(lower)) {
+    inquiry = "visitor visa";
+  }
+
+  /* next step */
 
   let next_step_taken =
     "follow_up_required";
+
+  if (
+    /callback|free callback/i.test(lower)
+  ) {
+    next_step_taken =
+      "free_callback";
+  }
 
   if (
     /paid consultation|payment|paid/i.test(
@@ -358,29 +189,10 @@ function extractData(text) {
   ) {
     next_step_taken =
       "paid_consultation";
-  } else if (
-    /free callback|callback/i.test(
-      lower
-    )
-  ) {
-    next_step_taken =
-      "free_callback";
   }
 
-  /* -------------------------
-     VALIDATION
-  ------------------------- */
-
-  const hasLead =
-    client_name ||
-    client_email ||
-    client_phone;
-
-  if (!hasLead)
-    return null;
-
   return {
-    caller_type,
+    caller_type: "new_client",
     client_name,
     client_email,
     client_phone,
@@ -390,20 +202,17 @@ function extractData(text) {
   };
 }
 
-/* ===========================
-   GOOGLE SHEETS
-=========================== */
+/* ==========================
+   GOOGLE SHEET
+========================== */
 
-async function appendToSheet(
-  data
-) {
+async function appendToSheet(data) {
   const client =
     await auth.getClient();
 
   const sheets =
     google.sheets({
-      version:
-        "v4",
+      version: "v4",
       auth: client,
     });
 
@@ -428,135 +237,104 @@ async function appendToSheet(
       },
     }
   );
-
-  console.log(
-    "✅ Saved to sheet"
-  );
 }
 
-/* ===========================
-   MAIN LOGIC
-=========================== */
+/* ==========================
+   ELEVENLABS API
+========================== */
 
-async function checkConversations() {
-  const processedIds =
-    new Set(
-      getProcessedIds()
+async function getConversation(id) {
+  const res =
+    await axios.get(
+      `https://api.elevenlabs.io/v1/convai/conversations/${id}`,
+      {
+        headers: {
+          "xi-api-key":
+            API_KEY,
+        },
+      }
     );
 
-  const conversations =
-    await getConversations();
-
-  for (const convo of conversations) {
-    const id =
-      convo.conversation_id;
-
-    if (
-      !id ||
-      processedIds.has(
-        id
-      )
-    ) {
-      continue;
-    }
-
-    const details =
-      await getConversationDetails(
-        id
-      );
-
-    let transcript =
-      "";
-
-    if (
-      Array.isArray(
-        details.transcript
-      )
-    ) {
-      transcript =
-        details.transcript
-          .filter(m => {
-            const role =
-              (
-                m.role ||
-                ""
-              ).toLowerCase();
-
-            return (
-              role.includes(
-                "user"
-              ) ||
-              role.includes(
-                "human"
-              )
-            );
-          })
-          .map(
-            m =>
-              m.message ||
-              m.text ||
-              ""
-          )
-          .join(" ");
-    }
-
-    if (!transcript)
-      continue;
-
-    const extracted =
-      extractData(
-        transcript
-      );
-
-    console.log(
-      extracted
-    );
-
-    if (
-      extracted
-    ) {
-      await appendToSheet(
-        extracted
-      );
-
-      processedIds.add(
-        id
-      );
-
-      saveProcessed([
-        ...processedIds,
-      ]);
-
-      console.log(
-        "✅ Saved:",
-        id
-      );
-    }
-  }
+  return res.data;
 }
 
-/* ===========================
-   VERCEL HANDLER
-=========================== */
+/* ==========================
+   API HANDLER
+========================== */
 
 module.exports =
-  async (
-    req,
-    res
-  ) => {
+  async (req, res) => {
     try {
-      await checkConversations();
+      const {
+        conversation_id,
+      } = req.body;
 
-      return res.json(
-        {
-          success: true,
-          message:
-            "done",
-        }
-      );
-    } catch (
-      err
-    ) {
+      if (
+        !conversation_id
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "conversation_id missing",
+          });
+      }
+
+      const details =
+        await getConversation(
+          conversation_id
+        );
+
+      let transcript =
+        "";
+
+      if (
+        Array.isArray(
+          details.transcript
+        )
+      ) {
+        transcript =
+          details.transcript
+            .filter(m => {
+              const role =
+                (
+                  m.role ||
+                  ""
+                ).toLowerCase();
+
+              return (
+                role.includes(
+                  "user"
+                ) ||
+                role.includes(
+                  "human"
+                )
+              );
+            })
+            .map(
+              m =>
+                m.message ||
+                m.text ||
+                ""
+            )
+            .join(" ");
+      }
+
+      const extracted =
+        extractData(
+          transcript
+        );
+
+      if (extracted) {
+        await appendToSheet(
+          extracted
+        );
+      }
+
+      return res.json({
+        success: true,
+      });
+    } catch (err) {
       return res
         .status(500)
         .json({
@@ -565,3 +343,188 @@ module.exports =
         });
     }
   };
+/* ===========================
+   PROCESSED IDS
+=========================== */
+
+const FILE_PATH =
+  "./processed.json";
+
+function getProcessedIds() {
+  try {
+    const raw =
+      fs.readFileSync(
+        FILE_PATH,
+        "utf8"
+      );
+
+    return JSON.parse(
+      raw || "[]"
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveProcessed(
+  ids
+) {
+  try {
+    fs.writeFileSync(
+      FILE_PATH,
+      JSON.stringify(
+        ids,
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.error(
+      "❌ saveProcessed error:",
+      err.message
+    );
+  }
+}
+  
+  /* ===========================
+   MAIN LOGIC
+=========================== */
+
+async function checkConversations() {
+  try {
+    const processedIds = new Set(
+      getProcessedIds()
+    );
+
+    const conversations =
+      await getConversations();
+
+    console.log(
+      `📞 Found ${conversations.length} conversations`
+    );
+
+    for (const convo of conversations) {
+      const id =
+        convo.conversation_id;
+
+      if (
+        !id ||
+        processedIds.has(id)
+      ) {
+        continue;
+      }
+
+      console.log(
+        `📞 Processing ${id}`
+      );
+
+      const details =
+        await getConversationDetails(
+          id
+        );
+
+      let transcript =
+        "";
+
+      if (
+        Array.isArray(
+          details.transcript
+        )
+      ) {
+        transcript =
+          details.transcript
+            .filter((m) => {
+              const role = (
+                m.role ||
+                m.source ||
+                ""
+              ).toLowerCase();
+
+              return (
+                role.includes(
+                  "user"
+                ) ||
+                role.includes(
+                  "human"
+                )
+              );
+            })
+            .map(
+              (m) =>
+                m.message ||
+                m.text ||
+                m.content ||
+                ""
+            )
+            .join(" ")
+            .trim();
+      }
+
+      console.log(
+        "📝 Transcript:",
+        transcript
+      );
+
+      if (!transcript)
+        continue;
+
+      const extracted =
+        extractData(
+          transcript
+        );
+
+      console.log(
+        "📦 Extracted:",
+        extracted
+      );
+
+      if (
+        extracted
+      ) {
+        await appendToSheet(
+          extracted
+        );
+
+        processedIds.add(
+          id
+        );
+
+        saveProcessed([
+          ...processedIds,
+        ]);
+
+        console.log(
+          `✅ Saved ${id}`
+        );
+      }
+    }
+  } catch (err) {
+    console.error(
+      "❌ checkConversations Error:",
+      err.message
+    );
+  }
+}
+
+console.log(
+  "🚀 App started"
+);
+
+(async () => {
+  try {
+    console.log(
+      "📞 Checking conversations..."
+    );
+
+    await checkConversations();
+
+    console.log(
+      "✅ Finished"
+    );
+  } catch (err) {
+    console.error(
+      "❌ Error:",
+      err
+    );
+  }
+})();
