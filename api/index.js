@@ -1,566 +1,606 @@
 require("dotenv").config();
 
-const fs = require("fs");
-const path = require("path");
 const axios = require("axios");
 const { google } = require("googleapis");
 
 /* ===========================
-   ENV
+ENV
 =========================== */
 
 const API_KEY =
-  process.env.ELEVENLABS_API_KEY;
+process.env.ELEVENLABS_API_KEY;
 
 const SHEET_ID =
-  process.env.GOOGLE_SHEET_ID;
+process.env.GOOGLE_SHEET_ID;
 
 if (!API_KEY) {
-  throw new Error(
-    "ELEVENLABS_API_KEY missing"
-  );
+throw new Error(
+"ELEVENLABS_API_KEY missing"
+);
 }
 
 if (!SHEET_ID) {
-  throw new Error(
-    "GOOGLE_SHEET_ID missing"
-  );
+throw new Error(
+"GOOGLE_SHEET_ID missing"
+);
 }
 
 /* ===========================
-   GOOGLE SERVICE ACCOUNT
+GOOGLE SERVICE ACCOUNT
 =========================== */
+
 const credentials = JSON.parse(
-  process.env.GOOGLE_SERVICE_ACCOUNT
+process.env.GOOGLE_SERVICE_ACCOUNT
 );
 
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: [
-    "https://www.googleapis.com/auth/spreadsheets",
-  ],
+const auth =
+new google.auth.GoogleAuth({
+credentials,
+scopes: [
+"https://www.googleapis.com/auth/spreadsheets",
+],
 });
 
 /* ===========================
-   EXTRACT DATA
+EXTRACT DATA
 =========================== */
 
 function extractData(text) {
-  if (!text) return null;
+if (!text) return null;
 
-  const lower =
-    text.toLowerCase();
+const lower =
+text.toLowerCase();
 
-  const ignoreWords = [
-    "thank",
-    "thanks",
-    "yeah",
-    "yes",
-    "hello",
-    "hi",
-    "interested",
-    "callback",
-    "visa",
-    "work",
-    "student",
-    "pr",
-    "india",
-    "australia",
-    "client",
-    "agent",
-    "growmore",
-    "immigration",
-    "temporary",
-    "correct",
-    "details",
-  ];
+const ignoreWords = [
+"thank",
+"thanks",
+"yeah",
+"yes",
+"hello",
+"hi",
+"interested",
+"callback",
+"visa",
+"work",
+"student",
+"pr",
+"india",
+"australia",
+"client",
+"agent",
+"growmore",
+"immigration",
+"temporary",
+"correct",
+"details",
+];
 
-  /* -------------------------
-     EMAIL
-  ------------------------- */
+/* EMAIL */
 
-  let client_email = "";
+let client_email = "";
 
-  const emailMatch =
-    text.match(
-      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-    );
+const emailMatch =
+text.match(
+/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+.[A-Z]{2,}\b/i
+);
 
-  if (emailMatch) {
-    client_email =
-      emailMatch[0].toLowerCase();
-  }
+if (emailMatch) {
+client_email =
+emailMatch[0].toLowerCase();
+}
 
-  /* spoken email */
+/* Spoken email */
 
-  if (!client_email) {
-    const spoken =
-      lower.match(
-        /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/i
+if (!client_email) {
+const spoken =
+lower.match(
+/([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|.)\s+([a-z]{2,10})/i
+);
+
+
+if (spoken) {
+  client_email =
+    `${spoken[1]}@${spoken[2]}.${spoken[3]}`
+      .replace(/\s/g, "")
+      .toLowerCase();
+}
+```
+
+}
+
+/* PHONE */
+
+let client_phone = "";
+
+const phones =
+text.match(
+/+?\d[\d\s()-]{8,20}\d/g
+) || [];
+
+for (const p of phones) {
+const clean =
+p.replace(/\D/g, "");
+
+```
+if (
+  clean.length >= 10 &&
+  clean.length <= 15
+) {
+  client_phone =
+    clean;
+  break;
+}
+```
+
+}
+
+/* CLIENT TYPE */
+
+let client_type =
+"new_client";
+
+if (
+/existing client|already applied|previous application|follow up|existing case/i.test(
+lower
+)
+) {
+client_type =
+"existing_client";
+}
+
+/* NAME */
+
+let client_name = "";
+
+const patterns = [
+/my name is\s+([a-z ]+)/i,
+/i am\s+([a-z ]+)/i,
+/this is\s+([a-z ]+)/i,
+/name\s*:\s*([a-z ]+)/i,
+/name is\s+([a-z ]+)/i,
+];
+
+for (const pattern of patterns) {
+const match =
+text.match(pattern);
+
+```
+if (match?.[1]) {
+  const candidate =
+    match[1]
+      .trim()
+      .replace(/\s+/g, " ");
+
+  const invalid =
+    candidate
+      .toLowerCase()
+      .split(" ")
+      .some(word =>
+        ignoreWords.includes(
+          word
+        )
       );
 
-    if (spoken) {
-      client_email =
-        `${spoken[1]}@${spoken[2]}.${spoken[3]}`
-          .replace(/\s/g, "")
-          .toLowerCase();
-    }
-  }
-
-  /* -------------------------
-     PHONE
-  ------------------------- */
-
-  let client_phone = "";
-
-  const phones =
-    text.match(
-      /\+?\d[\d\s()-]{8,20}\d/g
-    ) || [];
-
-  for (const p of phones) {
-    const clean =
-      p.replace(/\D/g, "");
-
-    if (
-      clean.length >= 10 &&
-      clean.length <= 15
-    ) {
-      client_phone =
-        clean;
-      break;
-    }
-  }
-
-  /* -------------------------
-     CLIENT TYPE
-  ------------------------- */
-
-  let client_type =
-    "new_client";
-
   if (
-    /existing client|already applied|previous application|follow up|existing case/i.test(
-      lower
-    )
+    candidate.length > 2 &&
+    !invalid
   ) {
-    client_type =
-      "existing_client";
+    client_name =
+      candidate;
+    break;
   }
+}
+```
 
-  /* -------------------------
-     NAME
-  ------------------------- */
+}
 
-  let client_name = "";
+/* fallback name from email */
 
-  const patterns = [
-    /my name is\s+([a-z ]+)/i,
-    /i am\s+([a-z ]+)/i,
-    /this is\s+([a-z ]+)/i,
-    /name\s*:\s*([a-z ]+)/i,
-    /name is\s+([a-z ]+)/i,
-  ];
+if (
+!client_name &&
+client_email
+) {
+const fallback =
+client_email
+.split("@")[0]
+.replace(
+/[0-9._-]/g,
+""
+);
 
-  for (const pattern of patterns) {
-    const match =
-      text.match(pattern);
-
-    if (match?.[1]) {
-      const candidate =
-        match[1]
-          .trim()
-          .replace(/\s+/g, " ");
-
-      const invalid =
-        candidate
-          .toLowerCase()
-          .split(" ")
-          .some(word =>
-            ignoreWords.includes(
-              word
-            )
-          );
-
-      if (
-        candidate.length >
-          2 &&
-        !invalid
-      ) {
-        client_name =
-          candidate;
-        break;
-      }
-    }
-  }
-
-  /* fallback from email */
-
-  if (
-    !client_name &&
-    client_email
-  ) {
-    const fallback =
-      client_email
-        .split("@")[0]
-        .replace(
-          /[0-9._-]/g,
-          ""
-        );
-
-    if (
-      fallback.length >=
-        3 &&
-      !ignoreWords.includes(
-        fallback.toLowerCase()
-      )
-    ) {
-      client_name =
-        fallback;
-    }
-  }
-
-  /* capitalize */
-
+```
+if (
+  fallback.length >= 3 &&
+  !ignoreWords.includes(
+    fallback.toLowerCase()
+  )
+) {
   client_name =
-    client_name
-      .split(" ")
-      .filter(Boolean)
-      .map(
-        word =>
-          word.charAt(0).toUpperCase() +
-          word.slice(1)
-      )
-      .join(" ");
+    fallback;
+}
+```
 
-  /* -------------------------
-     COUNTRY
-  ------------------------- */
+}
 
-  let caller_country = "";
+client_name =
+client_name
+.split(" ")
+.filter(Boolean)
+.map(
+word =>
+word.charAt(0).toUpperCase() +
+word.slice(1)
+)
+.join(" ");
 
-  if (
-    lower.includes("india")
-  ) {
-    caller_country =
-      "india";
-  }
+/* COUNTRY */
 
-  if (
-    lower.includes(
-      "australia"
-    )
-  ) {
-    caller_country =
-      "australia";
-  }
+let caller_country = "";
 
-  /* -------------------------
-     migration_intent_summary
-  ------------------------- */
+if (
+lower.includes("india")
+) {
+caller_country =
+"india";
+}
 
-  let migration_intent_summary =
-    "general migration_intent_summary";
+if (
+lower.includes(
+"australia"
+)
+) {
+caller_country =
+"australia";
+}
 
-  if (
-    /pr|189|190|491|pathway/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "pr pathways";
-  } else if (
-    /work|482|186/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "work visa";
-  } else if (
-    /student/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "student visa";
-  } else if (
-    /visitor|600/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "visitor visa";
-  }
+/* MIGRATION INTENT */
 
-  /* -------------------------
-     NEXT STEP
-  ------------------------- */
+let migration_intent_summary =
+"";
 
-  let next_step_taken =
-    "follow_up_required";
+if (
+/pr|189|190|491|pathway/i.test(
+lower
+)
+) {
+migration_intent_summary =
+"pr pathways";
+} else if (
+/work|482|186/i.test(
+lower
+)
+) {
+migration_intent_summary =
+"work visa";
+} else if (
+/student/i.test(
+lower
+)
+) {
+migration_intent_summary =
+"student visa";
+} else if (
+/visitor|600/i.test(
+lower
+)
+) {
+migration_intent_summary =
+"visitor visa";
+}
 
-  if (
-    /callback|free callback/i.test(
-      lower
-    )
-  ) {
-    next_step_taken =
-      "free_callback";
-  }
+/* NEXT STEP */
 
-  if (
-    /paid consultation|payment|paid/i.test(
-      lower
-    )
-  ) {
-    next_step_taken =
-      "paid_consultation";
-  }
+let next_step_taken =
+"";
 
-  /* -------------------------
-     VALIDATION
-  ------------------------- */
+if (
+/callback|free callback/i.test(
+lower
+)
+) {
+next_step_taken =
+"free_callback";
+}
 
-  const hasLead =
-    client_name ||
-    client_email ||
-    client_phone;
+if (
+/paid consultation|payment|paid/i.test(
+lower
+)
+) {
+next_step_taken =
+"paid_consultation";
+}
 
-  if (!hasLead) {
-    return null;
-  }
+/* VALIDATION */
 
-  return {
-    client_type,
-    client_name,
-    client_email,
-    client_phone,
-    migration_intent_summary,
-    next_step_taken,
-    caller_country,
-  };
+const hasLead =
+client_name ||
+client_email ||
+client_phone;
+
+if (!hasLead) {
+return null;
+}
+
+return {
+client_type,
+client_name,
+client_email,
+client_phone,
+migration_intent_summary,
+next_step_taken,
+caller_country,
+};
 }
 
 /* ===========================
-   GOOGLE SHEETS
+GOOGLE SHEETS
 =========================== */
 
 async function appendToSheet(data) {
+try {
+console.log(
+"Appending to Google Sheet..."
+);
 
-  const client = await auth.getClient();
+```
+console.log(
+  "Spreadsheet ID:",
+  SHEET_ID
+);
 
-  const sheets = google.sheets({
+console.log(
+  "Service Account:",
+  credentials.client_email
+);
+
+console.log(
+  "Data to save:",
+  data
+);
+
+const client =
+  await auth.getClient();
+
+const sheets =
+  google.sheets({
     version: "v4",
     auth: client,
   });
 
+const response =
   await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
+    spreadsheetId:
+      SHEET_ID,
 
-    range: "Sheet1!A:G",
+    // CHANGE IF TAB NAME IS DIFFERENT
+    range:
+      "Sheet1!A:G",
 
-    valueInputOption: "USER_ENTERED",
+    valueInputOption:
+      "USER_ENTERED",
 
-    insertDataOption: "INSERT_ROWS",
+    insertDataOption:
+      "INSERT_ROWS",
 
     requestBody: {
       values: [[
-        data.client_type,
-        data.client_name,
-        data.client_email,
-        data.client_phone,
-        data.migration_intent_summary,
-        data.next_step_taken,
-        data.caller_country,
+        data.client_type || "",
+        data.client_name || "",
+        data.client_email || "",
+        data.client_phone || "",
+        data.migration_intent_summary || "",
+        data.next_step_taken || "",
+        data.caller_country || "",
       ]],
     },
   });
 
-  console.log("✅ Saved to Google Sheet");
+console.log(
+  "✅ Saved to Google Sheet"
+);
+
+console.log(
+  "Google Response:",
+  response.data
+);
+
+return response.data;
+```
+
+} catch (error) {
+console.error(
+"❌ Google Sheet Error:"
+);
+
+```
+console.error(
+  error.response?.data ||
+  error.message ||
+  error
+);
+
+throw error;
+
+
 }
+}
+
 /* ===========================
-   ELEVENLABS API
+ELEVENLABS API
 =========================== */
 
 async function getConversation(
-  conversationId
+conversationId
 ) {
-  const res =
-    await axios.get(
-      `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
-      {
-        headers: {
-          "xi-api-key":
-            API_KEY,
-        },
-      }
-    );
+const res =
+await axios.get(
+`https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+{
+headers: {
+"xi-api-key":
+API_KEY,
+},
+}
+);
 
-  return res.data;
+return res.data;
 }
 
 /* ===========================
-   MAIN API HANDLER
+MAIN API HANDLER
 =========================== */
 
 module.exports =
-  async function handler(
-    req,
-    res
+async function handler(
+req,
+res
+) {
+if (
+req.method !== "POST"
+) {
+return res
+.status(405)
+.json({
+success: false,
+error:
+"Method Not Allowed",
+});
+}
+
+```
+try {
+  console.log(
+    "Incoming body:",
+    req.body
+  );
+
+  const body =
+    req.body;
+
+  let extractedData =
+    null;
+
+  /* DIRECT DATA */
+
+  if (
+    body.client_name ||
+    body.client_email ||
+    body.client_phone
   ) {
-    /* -------------------------
-       METHOD CHECK
-    ------------------------- */
+    extractedData = {
+      client_type:
+        body.client_type ||
+        "new_client",
 
-    if (
-      req.method !== "POST"
-    ) {
-      return res
-        .status(405)
-        .json({
-          success: false,
-          error:
-            "Method Not Allowed",
-        });
-    }
-
-    try {
-      console.log(
-        "Incoming body:",
-        req.body
-      );
-
-      const body =
-        req.body;
-
-      let extractedData =
-        null;
-
-      /* -------------------------
-         OPTION 1
-         DIRECT DATA
-      ------------------------- */
-
-      if (
+      client_name:
         body.client_name ||
+        "",
+
+      client_email:
         body.client_email ||
-        body.client_phone
-      ) {
-        extractedData = {
-          client_type:
-            body.client_type ||
-            "new_client",
+        "",
 
-          client_name:
-            body.client_name ||
-            "",
+      client_phone:
+        body.client_phone ||
+        "",
 
-          client_email:
-            body.client_email ||
-            "",
+      migration_intent_summary:
+        body.migration_intent_summary ||
+        "general inquiry",
 
-          client_phone:
-            body.client_phone ||
-            "",
+      next_step_taken:
+        body.next_step_taken ||
+        "follow_up_required",
 
-          migration_intent_summary:
-            body.migration_intent_summary ||
-            "general migration_intent_summary",
+      caller_country:
+        body.caller_country ||
+        "",
+    };
+  }
 
-          next_step_taken:
-            body.next_step_taken ||
-            "follow_up_required",
+  /* CONVERSATION ID */
 
-          caller_country:
-            body.caller_country ||
-            "",
-        };
-      }
-
-      /* -------------------------
-         OPTION 2
-         CONVERSATION ID
-      ------------------------- */
-
-      else if (
+  else if (
+    body.conversation_id
+  ) {
+    const convo =
+      await getConversation(
         body.conversation_id
-      ) {
-        const convo =
-          await getConversation(
-            body.conversation_id
-          );
-
-        console.log(
-          "Conversation fetched"
-        );
-
-        const transcript =
-          convo.transcript
-            ?.map(
-              item =>
-                item.message
-            )
-            .join(" ") || "";
-
-        console.log(
-          "Transcript:",
-          transcript
-        );
-
-        extractedData =
-          extractData(
-            transcript
-          );
-      }
-
-      /* -------------------------
-         NO DATA
-      ------------------------- */
-
-      if (
-        !extractedData
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error:
-              "No valid lead data found",
-          });
-      }
-
-      /* -------------------------
-         SAVE TO SHEET
-      ------------------------- */
-
-      await appendToSheet(
-        extractedData
       );
 
-      /* -------------------------
-         SUCCESS
-      ------------------------- */
+    console.log(
+      "Conversation fetched"
+    );
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message:
-            "Lead saved successfully",
-          data: extractedData,
-        });
-    } catch (error) {
-      console.error(
-        "API Error:",
-        error
+    const transcript =
+      convo.transcript
+        ?.map(
+          item =>
+            item.message
+        )
+        .join(" ") || "";
+
+    console.log(
+      "Transcript:",
+      transcript
+    );
+
+    extractedData =
+      extractData(
+        transcript
       );
+  }
 
-      return res
-        .status(500)
-        .json({
-          success: false,
-          error:
-            error.message,
-        });
-    }
-  };
+  /* NO DATA */
+
+  if (
+    !extractedData
+  ) {
+    return res
+      .status(400)
+      .json({
+        success: false,
+        error:
+          "No valid lead data found",
+      });
+  }
+
+  console.log(
+    "Saving extracted data:",
+    extractedData
+  );
+
+  /* SAVE TO SHEET */
+
+  await appendToSheet(
+    extractedData
+  );
+
+  return res
+    .status(200)
+    .json({
+      success: true,
+      message:
+        "Lead saved successfully",
+      data: extractedData,
+    });
+} catch (error) {
+  console.error(
+    "API Error:",
+    error.response?.data ||
+      error.message ||
+      error
+  );
+
+  return res
+    .status(500)
+    .json({
+      success: false,
+      error:
+        error.message,
+    });
+}
+```
+
+};
