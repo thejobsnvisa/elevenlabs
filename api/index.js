@@ -504,139 +504,118 @@ async function getConversation(
    MAIN API HANDLER
 =========================== */
 
-module.exports =
-  async function handler(
-    req,
-    res
-  ) {
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      success: false,
+      error: "Method Not Allowed",
+    });
+  }
+
+  try {
+    console.log("Incoming body:", req.body);
+
+    const body = req.body;
+
+    let extractedData = null;
+
+    /* ===========================
+       1. DIRECT POSTMAN DATA
+    =========================== */
+
     if (
-      req.method !==
-      "POST"
+      body.client_name ||
+      body.client_email ||
+      body.client_phone
     ) {
-      return res
-        .status(405)
-        .json({
-          success:
-            false,
-          error:
-            "Method Not Allowed",
-        });
+      extractedData = {
+        client_type:
+          body.client_type || "new_client",
+
+        client_name:
+          body.client_name || "",
+
+        client_email:
+          body.client_email || "",
+
+        client_phone:
+          body.client_phone || "",
+
+        migration_intent_summary:
+          body.migration_intent_summary ||
+          "general inquiry",
+
+        next_step_taken:
+          body.next_step_taken ||
+          "follow_up_required",
+
+        caller_country:
+          body.caller_country || "",
+      };
     }
 
-    try {
+    /* ===========================
+       2. ELEVENLABS WEBHOOK
+    =========================== */
+
+    else if (
+      body.type === "post_call_transcription" &&
+      body.data
+    ) {
+      const transcriptArray =
+        body.data.transcript || [];
+
+      const transcript =
+        transcriptArray
+          .map(item => item.message)
+          .join(" ");
+
       console.log(
-        "Incoming body:",
-        req.body
+        "Transcript:",
+        transcript
       );
 
-      const body =
-        req.body;
+      extractedData =
+        extractData(transcript);
 
-      let extractedData =
-        null;
-
-      /* DIRECT DATA */
-
-      if (
-        body.client_name ||
-        body.client_email ||
-        body.client_phone
-      ) {
-        extractedData = {
-          client_type:
-            body.client_type ||
-            "new_client",
-
-          client_name:
-            body.client_name ||
-            "",
-
-          client_email:
-            body.client_email ||
-            "",
-
-          client_phone:
-            body.client_phone ||
-            "",
-
-          migration_intent_summary:
-            body.migration_intent_summary ||
-            "general inquiry",
-
-          next_step_taken:
-            body.next_step_taken ||
-            "follow_up_required",
-
-          caller_country:
-            body.caller_country ||
-            "",
-        };
+      if (extractedData) {
+        extractedData.client_type =
+          extractedData.client_type ||
+          "new_client";
       }
-
-      /* CONVERSATION ID */
-
-      else if (
-        body.conversation_id
-      ) {
-        const convo =
-          await getConversation(
-            body.conversation_id
-          );
-
-        const transcript =
-          convo.transcript
-            ?.map(
-              item =>
-                item.message
-            )
-            .join(" ") ||
-          "";
-
-        extractedData =
-          extractData(
-            transcript
-          );
-      }
-
-      if (
-        !extractedData
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            error:
-              "No valid lead data found",
-          });
-      }
-
-      await appendToSheet(
-        extractedData
-      );
-
-      return res
-        .status(200)
-        .json({
-          success:
-            true,
-          message:
-            "Lead saved successfully",
-          data: extractedData,
-        });
-    } catch (error) {
-      console.error(
-        "API Error:",
-        error
-      );
-
-      return res
-        .status(500)
-        .json({
-          success:
-            false,
-          error:
-            error.message,
-        });
     }
-  };
+
+    /* ===========================
+       NO DATA FOUND
+    =========================== */
+
+    if (!extractedData) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "No valid lead data found",
+      });
+    }
+
+    await appendToSheet(
+      extractedData
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Lead saved successfully",
+      data: extractedData,
+    });
+  } catch (error) {
+    console.error(
+      "API Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
