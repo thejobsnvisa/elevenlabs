@@ -1,7 +1,5 @@
 require("dotenv").config();
 
-const fs = require("fs");
-const path = require("path");
 const axios = require("axios");
 const { google } = require("googleapis");
 
@@ -27,19 +25,32 @@ if (!SHEET_ID) {
   );
 }
 
+if (
+  !process.env
+    .GOOGLE_SERVICE_ACCOUNT
+) {
+  throw new Error(
+    "GOOGLE_SERVICE_ACCOUNT missing"
+  );
+}
+
 /* ===========================
    GOOGLE SERVICE ACCOUNT
 =========================== */
-const credentials = JSON.parse(
-  process.env.GOOGLE_SERVICE_ACCOUNT
-);
 
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: [
-    "https://www.googleapis.com/auth/spreadsheets",
-  ],
-});
+const credentials =
+  JSON.parse(
+    process.env
+      .GOOGLE_SERVICE_ACCOUNT
+  );
+
+const auth =
+  new google.auth.GoogleAuth({
+    credentials,
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets",
+    ],
+  });
 
 /* ===========================
    EXTRACT DATA
@@ -79,7 +90,8 @@ function extractData(text) {
      EMAIL
   ------------------------- */
 
-  let client_email = "";
+  let client_email =
+    "";
 
   const emailMatch =
     text.match(
@@ -111,7 +123,8 @@ function extractData(text) {
      PHONE
   ------------------------- */
 
-  let client_phone = "";
+  let client_phone =
+    "";
 
   const phones =
     text.match(
@@ -123,11 +136,14 @@ function extractData(text) {
       p.replace(/\D/g, "");
 
     if (
-      clean.length >= 10 &&
-      clean.length <= 15
+      clean.length >=
+        10 &&
+      clean.length <=
+        15
     ) {
       client_phone =
         clean;
+
       break;
     }
   }
@@ -137,7 +153,7 @@ function extractData(text) {
   ------------------------- */
 
   let client_type =
-    "new_client";
+    "";
 
   if (
     /existing client|already applied|previous application|follow up|existing case/i.test(
@@ -152,7 +168,8 @@ function extractData(text) {
      NAME
   ------------------------- */
 
-  let client_name = "";
+  let client_name =
+    "";
 
   const patterns = [
     /my name is\s+([a-z ]+)/i,
@@ -170,7 +187,10 @@ function extractData(text) {
       const candidate =
         match[1]
           .trim()
-          .replace(/\s+/g, " ");
+          .replace(
+            /\s+/g,
+            " "
+          );
 
       const invalid =
         candidate
@@ -189,6 +209,7 @@ function extractData(text) {
       ) {
         client_name =
           candidate;
+
         break;
       }
     }
@@ -228,8 +249,12 @@ function extractData(text) {
       .filter(Boolean)
       .map(
         word =>
-          word.charAt(0).toUpperCase() +
-          word.slice(1)
+          word.charAt(
+            0
+          ) +
+          word
+            .slice(1)
+            .toLowerCase()
       )
       .join(" ");
 
@@ -237,10 +262,13 @@ function extractData(text) {
      COUNTRY
   ------------------------- */
 
-  let caller_country = "";
+  let caller_country =
+    "";
 
   if (
-    lower.includes("india")
+    lower.includes(
+      "india"
+    )
   ) {
     caller_country =
       "india";
@@ -256,7 +284,7 @@ function extractData(text) {
   }
 
   /* -------------------------
-     migration_intent_summary
+     MIGRATION
   ------------------------- */
 
   let migration_intent_summary =
@@ -317,10 +345,6 @@ function extractData(text) {
       "paid_consultation";
   }
 
-  /* -------------------------
-     VALIDATION
-  ------------------------- */
-
   const hasLead =
     client_name ||
     client_email ||
@@ -345,39 +369,115 @@ function extractData(text) {
    GOOGLE SHEETS
 =========================== */
 
-async function appendToSheet(data) {
+async function appendToSheet(
+  data
+) {
+  try {
+    console.log(
+      "========== GOOGLE SHEET DEBUG =========="
+    );
 
-  const client = await auth.getClient();
+    console.log(
+      "Spreadsheet ID:",
+      SHEET_ID
+    );
 
-  const sheets = google.sheets({
-    version: "v4",
-    auth: client,
-  });
+    console.log(
+      "Service Account:",
+      credentials.client_email
+    );
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
+    const client =
+      await auth.getClient();
 
-    range: "Sheet1!A:G",
+    console.log(
+      "Google Auth Success"
+    );
 
-    valueInputOption: "USER_ENTERED",
+    const sheets =
+      google.sheets({
+        version: "v4",
+        auth: client,
+      });
 
-    insertDataOption: "INSERT_ROWS",
+    const values = [[
+      data.client_type ||
+        "",
+      data.client_name ||
+        "",
+      data.client_email ||
+        "",
+      data.client_phone ||
+        "",
+      data.migration_intent_summary ||
+        "",
+      data.next_step_taken ||
+        "",
+      data.caller_country ||
+        "",
+    ]];
 
-    requestBody: {
-      values: [[
-        data.client_type,
-        data.client_name,
-        data.client_email,
-        data.client_phone,
-        data.migration_intent_summary,
-        data.next_step_taken,
-        data.caller_country,
-      ]],
-    },
-  });
+    console.log(
+      "Values:",
+      values
+    );
 
-  console.log("✅ Saved to Google Sheet");
+    const response =
+      await sheets.spreadsheets.values.append(
+        {
+          spreadsheetId:
+            SHEET_ID,
+
+          // CHANGE IF TAB NAME IS DIFFERENT
+          range:
+            "Sheet1!A:G",
+
+          valueInputOption:
+            "USER_ENTERED",
+
+          insertDataOption:
+            "INSERT_ROWS",
+
+          requestBody: {
+            values,
+          },
+        }
+      );
+
+    console.log(
+      "✅ Saved to Google Sheet"
+    );
+
+    console.log(
+      response.data
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      "❌ GOOGLE SHEET ERROR"
+    );
+
+    console.error(
+      "Message:",
+      error.message
+    );
+
+    console.error(
+      "Response:",
+      error.response
+        ?.data
+    );
+
+    console.error(
+      "Errors:",
+      error.errors
+    );
+
+    throw error;
+  }
 }
+
 /* ===========================
    ELEVENLABS API
 =========================== */
@@ -408,17 +508,15 @@ module.exports =
     req,
     res
   ) {
-    /* -------------------------
-       METHOD CHECK
-    ------------------------- */
-
     if (
-      req.method !== "POST"
+      req.method !==
+      "POST"
     ) {
       return res
         .status(405)
         .json({
-          success: false,
+          success:
+            false,
           error:
             "Method Not Allowed",
         });
@@ -436,10 +534,7 @@ module.exports =
       let extractedData =
         null;
 
-      /* -------------------------
-         OPTION 1
-         DIRECT DATA
-      ------------------------- */
+      /* DIRECT DATA */
 
       if (
         body.client_name ||
@@ -465,7 +560,7 @@ module.exports =
 
           migration_intent_summary:
             body.migration_intent_summary ||
-            "general migration_intent_summary",
+            "general inquiry",
 
           next_step_taken:
             body.next_step_taken ||
@@ -477,10 +572,7 @@ module.exports =
         };
       }
 
-      /* -------------------------
-         OPTION 2
-         CONVERSATION ID
-      ------------------------- */
+      /* CONVERSATION ID */
 
       else if (
         body.conversation_id
@@ -490,22 +582,14 @@ module.exports =
             body.conversation_id
           );
 
-        console.log(
-          "Conversation fetched"
-        );
-
         const transcript =
           convo.transcript
             ?.map(
               item =>
                 item.message
             )
-            .join(" ") || "";
-
-        console.log(
-          "Transcript:",
-          transcript
-        );
+            .join(" ") ||
+          "";
 
         extractedData =
           extractData(
@@ -513,38 +597,28 @@ module.exports =
           );
       }
 
-      /* -------------------------
-         NO DATA
-      ------------------------- */
-
       if (
         !extractedData
       ) {
         return res
           .status(400)
           .json({
-            success: false,
+            success:
+              false,
             error:
               "No valid lead data found",
           });
       }
 
-      /* -------------------------
-         SAVE TO SHEET
-      ------------------------- */
-
       await appendToSheet(
         extractedData
       );
 
-      /* -------------------------
-         SUCCESS
-      ------------------------- */
-
       return res
         .status(200)
         .json({
-          success: true,
+          success:
+            true,
           message:
             "Lead saved successfully",
           data: extractedData,
@@ -558,7 +632,8 @@ module.exports =
       return res
         .status(500)
         .json({
-          success: false,
+          success:
+            false,
           error:
             error.message,
         });
