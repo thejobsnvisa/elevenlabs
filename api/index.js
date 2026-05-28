@@ -171,13 +171,16 @@ function extractData(text) {
   let client_name =
     "";
 
-  const patterns = [
-    /my name is\s+([a-z ]+)/i,
-    /i am\s+([a-z ]+)/i,
-    /this is\s+([a-z ]+)/i,
-    /name\s*:\s*([a-z ]+)/i,
-    /name is\s+([a-z ]+)/i,
-  ];
+ const patterns = [
+/existing client named\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/client named\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/named\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/my name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/tThe user\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/this is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+/name\s*:\s*([a-z]+(?:\s[a-z]+){0,3})/i,
+/name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+];
 
   for (const pattern of patterns) {
     const match =
