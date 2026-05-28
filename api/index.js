@@ -137,13 +137,6 @@ function extractData(text) {
     /new client named\s+([a-z]+(?:\s[a-z]+){0,2})/i,
     /user,\s+an?\s+(?:existing|new)?\s*client\s+named\s+([a-z]+(?:\s[a-z]+){0,2})/i,
     /user named\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-
-    // Spoken conversation style
-    /my name is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-    /i am\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-    /this is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-    /name\s*:\s*([a-z]+(?:\s[a-z]+){0,2})/i,
-    /name is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
   ];
 
   for (const pattern of patterns) {
