@@ -428,15 +428,16 @@ async function appendToSheet(
           spreadsheetId:
             SHEET_ID,
 
-          // CHANGE IF TAB NAME IS DIFFERENT
+          // START FROM ROW 2 (AFTER HEADERS IN ROW 1)
           range:
-            "Sheet1!A:G",
+            "Sheet1!A2:G",
 
           valueInputOption:
             "USER_ENTERED",
 
+          // APPEND WITHOUT SHIFTING EXISTING DATA
           insertDataOption:
-            "INSERT_ROWS",
+            "OVERWRITE",
 
           requestBody: {
             values,
