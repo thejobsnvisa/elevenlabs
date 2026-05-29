@@ -55,32 +55,12 @@ const auth =
 /* ===========================
    EXTRACT DATA
 =========================== */
+
 function extractData(text) {
   if (!text) return null;
 
   const lower =
     text.toLowerCase();
-
-  const ignoreWords = [
-    "thank",
-    "thanks",
-    "yeah",
-    "yes",
-    "hello",
-    "hi",
-    "interested",
-    "callback",
-    "visa",
-    "work",
-    "student",
-    "client",
-    "agent",
-    "growmore",
-    "immigration",
-    "temporary",
-    "correct",
-    "details",
-  ];
 
   /* -------------------------
      EMAIL
@@ -143,98 +123,173 @@ function extractData(text) {
     }
   }
 
-/* -------------------------
-   CLIENT TYPE
-------------------------- */
+  /* -------------------------
+     CLIENT TYPE
+  ------------------------- */
 
-let client_type =
-  "new_client";
-
-if (
-  /existing client|existing case|already applied|follow up|returning client/i.test(
-    lower
-  )
-) {
-  client_type =
-    "existing_client";
-}
-
-if (
-  /new client|first time/i.test(
-    lower
-  )
-) {
-  client_type =
+  let client_type =
     "new_client";
-}
-
-/* -------------------------
-   NAME
-------------------------- */
-
-
-  let caller_country = "";
 
   if (
-    lower.includes("india")
-  ) {
-    caller_country = "india";
-  }
-
-  if (
-    lower.includes("australia")
-  ) {
-    caller_country =
-      "australia";
-  }
-
-/* -------------------------
-   COUNTRY
-------------------------- */
-
- let caller_country = "";
-
-  if (
-    lower.includes("india")
-  ) {
-    caller_country =
-      "india";
-  }
-
-  if (
-    lower.includes(
-      "australia"
+    /existing client|existing case|already applied|follow up|returning client/i.test(
+      lower
     )
   ) {
-    caller_country =
-      "australia";
+    client_type =
+      "existing_client";
   }
 
+  if (
+    /new client|first time/i.test(
+      lower
+    )
+  ) {
+    client_type =
+      "new_client";
+  }
 
-/* -------------------------
-   MIGRATION SUMMARY
-------------------------- */
+  /* -------------------------
+     NAME
+  ------------------------- */
 
-let migration_intent_summary =
-  "";
+  let client_name =
+    "";
 
-const visaMatch =
-  text.match(
-    /(visitor visa|student visa|work visa|tourist visa|dependent visa|pr|permanent residency)/i
-  );
+  const namePatterns = [
+    // name (Riddhi Upadhyay)
+    /name\s*\(([^)]+)\)/i,
 
-if (visaMatch?.[1]) {
-  migration_intent_summary =
-    visaMatch[1]
-      .trim()
-      .toLowerCase();
-}
+    // my name is riddhi
+    /my name is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
 
-let next_step_taken =
+    // i am riddhi
+    /i am\s+([a-z]+(?:\s[a-z]+){0,2})/i,
+
+    // this is riddhi
+    /this is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
+
+    // user riddhi
+    /user[,:\s]+([a-z]+(?:\s[a-z]+){0,2})/i,
+
+    // riddhi from india
+    /([a-z]+(?:\s[a-z]+){0,2})\s+from\s+[a-z]+/i,
+  ];
+
+  for (const pattern of namePatterns) {
+    const match =
+      text.match(pattern);
+
+    if (match?.[1]) {
+      client_name =
+        match[1]
+          .trim()
+          .replace(
+            /\s+/g,
+            " "
+          );
+
+      break;
+    }
+  }
+
+  /* fallback from email */
+
+  if (
+    !client_name &&
+    client_email
+  ) {
+    client_name =
+      client_email
+        .split("@")[0]
+        .replace(
+          /[0-9._-]/g,
+          " "
+        );
+  }
+
+  /* capitalize */
+
+  client_name =
+    client_name
+      .split(" ")
+      .filter(Boolean)
+      .map(
+        word =>
+          word.charAt(0)
+            .toUpperCase() +
+          word
+            .slice(1)
+            .toLowerCase()
+      )
+      .join(" ");
+
+  /* -------------------------
+     COUNTRY
+  ------------------------- */
+
+  let caller_country =
+    "";
+
+  const countryMatch =
+    text.match(
+      /from\s+([A-Za-z\s]+?)(?:[.,]|$|\s(?:seeking|contacted|for))/i
+    );
+
+  if (countryMatch?.[1]) {
+    caller_country =
+      countryMatch[1]
+        .trim()
+        .toLowerCase();
+  }
+
+  /* fallback */
+
+  if (!caller_country) {
+    if (
+      lower.includes(
+        "india"
+      )
+    ) {
+      caller_country =
+        "india";
+    } else if (
+      lower.includes(
+        "australia"
+      )
+    ) {
+      caller_country =
+        "australia";
+    }
+  }
+
+  /* -------------------------
+     MIGRATION SUMMARY
+  ------------------------- */
+
+  let migration_intent_summary =
+    "";
+
+  const visaMatch =
+    text.match(
+      /(visitor visa|student visa|work visa|tourist visa|dependent visa|pr|permanent residency)/i
+    );
+
+  if (visaMatch?.[1]) {
+    migration_intent_summary =
+      visaMatch[1]
+        .trim()
+        .toLowerCase();
+  }
+
+  /* -------------------------
+     NEXT STEP
+  ------------------------- */
+
+  let next_step_taken =
     "follow_up_required";
 
   if (
-    /callback|free callback/i.test(
+    /free callback|callback|call back|call me back/i.test(
       lower
     )
   ) {
@@ -251,6 +306,19 @@ let next_step_taken =
       "paid_consultation";
   }
 
+  /* -------------------------
+     VALIDATE LEAD
+  ------------------------- */
+
+  const hasLead =
+    client_name ||
+    client_email ||
+    client_phone;
+
+  if (!hasLead) {
+    return null;
+  }
+
   return {
     client_type,
     client_name,
@@ -262,7 +330,6 @@ let next_step_taken =
   };
 }
 
-
 /* ===========================
    GOOGLE SHEETS
 =========================== */
@@ -271,26 +338,8 @@ async function appendToSheet(
   data
 ) {
   try {
-    console.log(
-      "========== GOOGLE SHEET DEBUG =========="
-    );
-
-    console.log(
-      "Spreadsheet ID:",
-      SHEET_ID
-    );
-
-    console.log(
-      "Service Account:",
-      credentials.client_email
-    );
-
     const client =
       await auth.getClient();
-
-    console.log(
-      "Google Auth Success"
-    );
 
     const sheets =
       google.sheets({
@@ -315,62 +364,29 @@ async function appendToSheet(
         "",
     ]];
 
-    console.log(
-      "Values:",
-      values
+    await sheets.spreadsheets.values.append(
+      {
+        spreadsheetId:
+          SHEET_ID,
+        range:
+          "Sheet1!A2:G",
+        valueInputOption:
+          "USER_ENTERED",
+        insertDataOption:
+          "INSERT_ROWS",
+        requestBody: {
+          values,
+        },
+      }
     );
-
-    const response =
-      await sheets.spreadsheets.values.append(
-        {
-          spreadsheetId:
-            SHEET_ID,
-
-          // START FROM ROW 2 (AFTER HEADERS IN ROW 1)
-          range:
-            "Sheet1!A2:G",
-
-          valueInputOption:
-            "USER_ENTERED",
-
-          // APPEND WITHOUT SHIFTING EXISTING DATA
-          insertDataOption:
-            "OVERWRITE",
-
-          requestBody: {
-            values,
-          },
-        }
-      );
 
     console.log(
       "✅ Saved to Google Sheet"
     );
-
-    console.log(
-      response.data
-    );
-
-    return response.data;
   } catch (error) {
     console.error(
-      "❌ GOOGLE SHEET ERROR"
-    );
-
-    console.error(
-      "Message:",
+      "❌ GOOGLE SHEET ERROR:",
       error.message
-    );
-
-    console.error(
-      "Response:",
-      error.response
-        ?.data
-    );
-
-    console.error(
-      "Errors:",
-      error.errors
     );
 
     throw error;
@@ -378,142 +394,158 @@ async function appendToSheet(
 }
 
 /* ===========================
-   ELEVENLABS API
-=========================== */
-
-async function getConversation(
-  conversationId
-) {
-  const res =
-    await axios.get(
-      `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
-      {
-        headers: {
-          "xi-api-key":
-            API_KEY,
-        },
-      }
-    );
-
-  return res.data;
-}
-
-/* ===========================
    MAIN API HANDLER
 =========================== */
 
-module.exports = async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      error: "Method Not Allowed",
-    });
-  }
-
-  try {
-    console.log("Incoming body:", req.body);
-
-    const body = req.body;
-
-    let extractedData = null;
-
-    /* ===========================
-       1. DIRECT POSTMAN DATA
-    =========================== */
-
+module.exports =
+  async function handler(
+    req,
+    res
+  ) {
     if (
-      body.client_name ||
-      body.client_email ||
-      body.client_phone
+      req.method !==
+      "POST"
     ) {
-      extractedData = {
-        client_type:
-          body.client_type || "new_client",
-
-        client_name:
-          body.client_name || "",
-
-        client_email:
-          body.client_email || "",
-
-        client_phone:
-          body.client_phone || "",
-
-        migration_intent_summary:
-          body.migration_intent_summary ||
-          "general inquiry",
-
-        next_step_taken:
-          body.next_step_taken ||
-          "follow_up_required",
-
-        caller_country:
-          body.caller_country || "",
-      };
+      return res
+        .status(405)
+        .json({
+          success: false,
+          error:
+            "Method Not Allowed",
+        });
     }
 
-    /* ===========================
-       2. ELEVENLABS WEBHOOK
-    =========================== */
-
-    else if (
-      body.type === "post_call_transcription" &&
-      body.data
-    ) {
-      const transcriptArray =
-        body.data.transcript || [];
-
-      const transcript =
-        transcriptArray
-          .map(item => item.message)
-          .join(" ");
-
+    try {
       console.log(
-        "Transcript:",
-        transcript
+        "Incoming body:",
+        req.body
       );
 
-      extractedData =
-        extractData(transcript);
+      const body =
+        req.body;
 
-      if (extractedData) {
-        extractedData.client_type =
-          extractedData.client_type ||
-          "new_client";
+      let extractedData =
+        null;
+
+      /* ===========================
+         DIRECT DATA
+      =========================== */
+
+      if (
+        body.client_name ||
+        body.client_email ||
+        body.client_phone
+      ) {
+        extractedData = {
+          client_type:
+            body.client_type ||
+            "new_client",
+
+          client_name:
+            body.client_name ||
+            "",
+
+          client_email:
+            body.client_email ||
+            "",
+
+          client_phone:
+            body.client_phone ||
+            "",
+
+          migration_intent_summary:
+            body.migration_intent_summary ||
+            "",
+
+          next_step_taken:
+            body.next_step_taken ||
+            "follow_up_required",
+
+          caller_country:
+            body.caller_country ||
+            "",
+        };
       }
+
+      /* ===========================
+         ELEVENLABS WEBHOOK
+      =========================== */
+
+      else if (
+        body.type ===
+          "post_call_transcription" &&
+        body.data
+      ) {
+        const transcriptArray =
+          body.data
+            .transcript ||
+          [];
+
+        // ONLY USER MESSAGES
+        const transcript =
+          transcriptArray
+            .filter(
+              item =>
+                item.role ===
+                "user"
+            )
+            .map(
+              item =>
+                item.message
+            )
+            .join(" ");
+
+        console.log(
+          "Transcript:",
+          transcript
+        );
+
+        extractedData =
+          extractData(
+            transcript
+          );
+      }
+
+      /* ===========================
+         NO DATA FOUND
+      =========================== */
+
+      if (
+        !extractedData
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error:
+              "No valid lead data found",
+          });
+      }
+
+      await appendToSheet(
+        extractedData
+      );
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message:
+            "Lead saved successfully",
+          data: extractedData,
+        });
+    } catch (error) {
+      console.error(
+        "API Error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          error:
+            error.message,
+        });
     }
-
-    /* ===========================
-       NO DATA FOUND
-    =========================== */
-
-    if (!extractedData) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "No valid lead data found",
-      });
-    }
-
-    await appendToSheet(
-      extractedData
-    );
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Lead saved successfully",
-      data: extractedData,
-    });
-  } catch (error) {
-    console.error(
-      "API Error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-};
+  };
