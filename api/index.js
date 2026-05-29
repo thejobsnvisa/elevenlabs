@@ -172,77 +172,44 @@ if (
    NAME
 ------------------------- */
 
-let client_name =
-  "";
 
-const namePatterns = [
-  // name (Riddhi Upadhyay)
-  /name\s*\(([^)]+)\)/i,
+  let caller_country = "";
 
-  // my name is riddhi
-  /my name is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-
-  // i am riddhi
-  /i am\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-
-  // this is riddhi
-  /this is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
-
-  // user riddhi upadhyay
-  /user[,:\s]+([a-z]+(?:\s[a-z]+){0,2})/i,
-];
-
-for (const pattern of namePatterns) {
-  const match =
-    text.match(pattern);
-
-  if (match?.[1]) {
-    client_name =
-      match[1]
-        .trim()
-        .replace(
-          /\s+/g,
-          " "
-        );
-
-    break;
+  if (
+    lower.includes("india")
+  ) {
+    caller_country = "india";
   }
-}
 
-/* capitalize */
-
-client_name =
-  client_name
-    .split(" ")
-    .filter(Boolean)
-    .map(
-      word =>
-        word.charAt(0)
-          .toUpperCase() +
-        word
-          .slice(1)
-          .toLowerCase()
-    )
-    .join(" ");
+  if (
+    lower.includes("australia")
+  ) {
+    caller_country =
+      "australia";
+  }
 
 /* -------------------------
    COUNTRY
 ------------------------- */
 
-let caller_country =
-  "";
+ let caller_country = "";
 
-const countryMatch =
-  text.match(
-    /from\s+([A-Za-z\s]+?)(?:[.,]|$|\s(?:seeking|contacted|for))/i
-  );
+  if (
+    lower.includes("india")
+  ) {
+    caller_country =
+      "india";
+  }
 
-if (countryMatch?.[1]) {
-  caller_country =
-    countryMatch[1]
-      .trim()
-      .toLowerCase();
-}
+  if (
+    lower.includes(
+      "australia"
+    )
+  ) {
+    caller_country =
+      "australia";
+  }
+
 
 /* -------------------------
    MIGRATION SUMMARY
@@ -263,39 +230,25 @@ if (visaMatch?.[1]) {
       .toLowerCase();
 }
 
-/* -------------------------
-   NEXT STEP
-------------------------- */
-
 let next_step_taken =
-  "";
+    "follow_up_required";
 
-if (
-  /free callback|callback|call back|call me back/i.test(
-    lower
-  )
-) {
-  next_step_taken =
-    "free_callback";
-}
+  if (
+    /callback|free callback/i.test(
+      lower
+    )
+  ) {
+    next_step_taken =
+      "free_callback";
+  }
 
-if (
-  /paid consultation|payment|paid/i.test(
-    lower
-  )
-) {
-  next_step_taken =
-    "paid_consultation";
-}
-
-
-  const hasLead =
-    client_name ||
-    client_email ||
-    client_phone;
-
-  if (!hasLead) {
-    return null;
+  if (
+    /paid consultation|payment|paid/i.test(
+      lower
+    )
+  ) {
+    next_step_taken =
+      "paid_consultation";
   }
 
   return {
