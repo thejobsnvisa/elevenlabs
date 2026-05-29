@@ -55,7 +55,6 @@ const auth =
 /* ===========================
    EXTRACT DATA
 =========================== */
-
 function extractData(text) {
   if (!text) return null;
 
@@ -74,9 +73,6 @@ function extractData(text) {
     "visa",
     "work",
     "student",
-    "pr",
-    "india",
-    "australia",
     "client",
     "agent",
     "growmore",
@@ -143,7 +139,6 @@ function extractData(text) {
     ) {
       client_phone =
         clean;
-
       break;
     }
   }
@@ -153,10 +148,10 @@ function extractData(text) {
   ------------------------- */
 
   let client_type =
-    "";
+    "new_client";
 
   if (
-    /existing client|already applied|previous application|follow up|existing case/i.test(
+    /existing|already applied|follow up|returning|old client|existing case/i.test(
       lower
     )
   ) {
@@ -172,11 +167,18 @@ function extractData(text) {
     "";
 
   const patterns = [
-    /my name is\s+([a-z ]+)/i,
-    /i am\s+([a-z ]+)/i,
-    /this is\s+([a-z ]+)/i,
-    /name\s*:\s*([a-z ]+)/i,
-    /name is\s+([a-z ]+)/i,
+    /my name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+    /i am\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+    /this is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+    /name\s*:\s*([a-z]+(?:\s[a-z]+){0,3})/i,
+    /name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+
+    // transcript summary support
+    /the user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+    /user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+
+    // "Ajay Gaur from India"
+    /([a-z]+(?:\s[a-z]+){1,3})\s+from\s+[a-z]+/i,
   ];
 
   for (const pattern of patterns) {
@@ -209,7 +211,6 @@ function extractData(text) {
       ) {
         client_name =
           candidate;
-
         break;
       }
     }
@@ -221,24 +222,13 @@ function extractData(text) {
     !client_name &&
     client_email
   ) {
-    const fallback =
+    client_name =
       client_email
         .split("@")[0]
         .replace(
           /[0-9._-]/g,
-          ""
+          " "
         );
-
-    if (
-      fallback.length >=
-        3 &&
-      !ignoreWords.includes(
-        fallback.toLowerCase()
-      )
-    ) {
-      client_name =
-        fallback;
-    }
   }
 
   /* capitalize */
@@ -251,7 +241,8 @@ function extractData(text) {
         word =>
           word.charAt(
             0
-          ) +
+          )
+            .toUpperCase() +
           word
             .slice(1)
             .toLowerCase()
@@ -265,59 +256,34 @@ function extractData(text) {
   let caller_country =
     "";
 
-  if (
-    lower.includes(
-      "india"
-    )
-  ) {
-    caller_country =
-      "india";
-  }
+  const countryMatch =
+    text.match(
+      /\bfrom\s+([a-z\s]+?)(?:[.,]|$|\s(?:for|to|and))/i
+    );
 
-  if (
-    lower.includes(
-      "australia"
-    )
-  ) {
+  if (countryMatch?.[1]) {
     caller_country =
-      "australia";
+      countryMatch[1]
+        .trim()
+        .toLowerCase();
   }
 
   /* -------------------------
-     MIGRATION
+     MIGRATION SUMMARY
   ------------------------- */
 
   let migration_intent_summary =
     "";
 
-  if (
-    /pr|189|190|491|pathway/i.test(
-      lower
-    )
-  ) {
+  const migrationMatch =
+    text.match(
+      /(looking for|seeking|interested in|want|need|applying for|regarding)\s+(.+?)(?:[.,]|$)/i
+    );
+
+  if (migrationMatch?.[2]) {
     migration_intent_summary =
-      "pr pathways";
-  } else if (
-    /work|482|186/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "work visa";
-  } else if (
-    /student/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "student visa";
-  } else if (
-    /visitor|600/i.test(
-      lower
-    )
-  ) {
-    migration_intent_summary =
-      "visitor visa";
+      migrationMatch[2]
+        .trim();
   }
 
   /* -------------------------
@@ -328,7 +294,7 @@ function extractData(text) {
     "";
 
   if (
-    /callback|free callback/i.test(
+    /callback|call back|call me back|free callback/i.test(
       lower
     )
   ) {
@@ -337,7 +303,7 @@ function extractData(text) {
   }
 
   if (
-    /paid consultation|payment|paid/i.test(
+    /paid consultation|consultation|payment|paid/i.test(
       lower
     )
   ) {
@@ -364,6 +330,7 @@ function extractData(text) {
     caller_country,
   };
 }
+
 
 /* ===========================
    GOOGLE SHEETS
