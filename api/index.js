@@ -55,20 +55,48 @@ const auth =
 /* ===========================
    EXTRACT DATA
 =========================== */
+
 function extractData(text) {
   if (!text) return null;
 
-  const lower = text.toLowerCase();
+  const lower =
+    text.toLowerCase();
 
-  /* ==========================
+  const ignoreWords = [
+    "thank",
+    "thanks",
+    "yeah",
+    "yes",
+    "hello",
+    "hi",
+    "interested",
+    "callback",
+    "visa",
+    "work",
+    "student",
+    "pr",
+    "india",
+    "australia",
+    "client",
+    "agent",
+    "growmore",
+    "immigration",
+    "temporary",
+    "correct",
+    "details",
+  ];
+
+  /* -------------------------
      EMAIL
-  ========================== */
+  ------------------------- */
 
-  let client_email = "";
+  let client_email =
+    "";
 
-  const emailMatch = text.match(
-    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
-  );
+  const emailMatch =
+    text.match(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+    );
 
   if (emailMatch) {
     client_email =
@@ -80,7 +108,7 @@ function extractData(text) {
   if (!client_email) {
     const spoken =
       lower.match(
-        /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/
+        /([a-z0-9._%+-]+)\s+(?:at|at the rate)\s+([a-z0-9.-]+)\s+(?:dot|\.)\s+([a-z]{2,10})/i
       );
 
     if (spoken) {
@@ -91,11 +119,12 @@ function extractData(text) {
     }
   }
 
-  /* ==========================
+  /* -------------------------
      PHONE
-  ========================== */
+  ------------------------- */
 
-  let client_phone = "";
+  let client_phone =
+    "";
 
   const phones =
     text.match(
@@ -107,23 +136,27 @@ function extractData(text) {
       p.replace(/\D/g, "");
 
     if (
-      clean.length >= 10 &&
-      clean.length <= 15
+      clean.length >=
+        10 &&
+      clean.length <=
+        15
     ) {
-      client_phone = clean;
+      client_phone =
+        clean;
+
       break;
     }
   }
 
-  /* ==========================
+  /* -------------------------
      CLIENT TYPE
-  ========================== */
+  ------------------------- */
 
   let client_type =
-    "new_client";
+    "";
 
   if (
-    /(existing|already applied|follow up|returning|old client|existing case|my case)/i.test(
+    /existing client|already applied|previous application|follow up|existing case/i.test(
       lower
     )
   ) {
@@ -131,31 +164,54 @@ function extractData(text) {
       "existing_client";
   }
 
-  /* ==========================
+  /* -------------------------
      NAME
-  ========================== */
+  ------------------------- */
 
-  let client_name = "";
+  let client_name =
+    "";
 
-  const namePatterns = [
-    /my name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /i am\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /this is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /the user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+  const patterns = [
+    /my name is\s+([a-z ]+)/i,
+    /i am\s+([a-z]+)/i,
+    /this is\s+([a-z]+)/i,
+    /name\s*:\s*([a-z]+)/i,
+    /name is\s+([a-z]+)/i,
   ];
 
-  for (const pattern of namePatterns) {
+  for (const pattern of patterns) {
     const match =
       text.match(pattern);
 
     if (match?.[1]) {
-      client_name =
+      const candidate =
         match[1]
           .trim()
-          .replace(/\s+/g, " ");
-      break;
+          .replace(
+            /\s+/g,
+            " "
+          );
+
+      const invalid =
+        candidate
+          .toLowerCase()
+          .split(" ")
+          .some(word =>
+            ignoreWords.includes(
+              word
+            )
+          );
+
+      if (
+        candidate.length >
+          2 &&
+        !invalid
+      ) {
+        client_name =
+          candidate;
+
+        break;
+      }
     }
   }
 
@@ -165,14 +221,27 @@ function extractData(text) {
     !client_name &&
     client_email
   ) {
-    client_name =
+    const fallback =
       client_email
         .split("@")[0]
         .replace(
           /[0-9._-]/g,
-          " "
+          ""
         );
+
+    if (
+      fallback.length >=
+        3 &&
+      !ignoreWords.includes(
+        fallback.toLowerCase()
+      )
+    ) {
+      client_name =
+        fallback;
+    }
   }
+
+  /* capitalize */
 
   client_name =
     client_name
@@ -180,79 +249,101 @@ function extractData(text) {
       .filter(Boolean)
       .map(
         word =>
-          word.charAt(0)
-            .toUpperCase() +
+          word.charAt(
+            0
+          ) +
           word
             .slice(1)
             .toLowerCase()
       )
       .join(" ");
 
-  /* ==========================
-     COUNTRY (dynamic)
-  ========================== */
+  /* -------------------------
+     COUNTRY
+  ------------------------- */
 
-  let caller_country = "";
+  let caller_country =
+    "";
 
-  const countryMatch =
-    text.match(
-      /\bfrom\s+([A-Za-z\s]+?)(?:[.,]|$|\s(?:for|to|and|who|seeking))/i
-    );
-
-  if (countryMatch?.[1]) {
+  if (
+    lower.includes(
+      "india"
+    )
+  ) {
     caller_country =
-      countryMatch[1]
-        .trim()
-        .toLowerCase();
+      "india";
   }
 
-  /* ==========================
-     MIGRATION INTENT (dynamic)
-  ========================== */
+  if (
+    lower.includes(
+      "australia"
+    )
+  ) {
+    caller_country =
+      "australia";
+  }
+
+  /* -------------------------
+     MIGRATION
+  ------------------------- */
 
   let migration_intent_summary =
     "";
 
-  const migrationMatch =
-    text.match(
-      /(interested in|looking for|seeking|want|need|applying for|regarding)\s+(.+?)(?:[.,]|$)/i
-    );
-
-  if (migrationMatch?.[2]) {
+  if (
+    /pr|189|190|491|pathway/i.test(
+      lower
+    )
+  ) {
     migration_intent_summary =
-      migrationMatch[2]
-        .trim()
-        .toLowerCase();
+      "pr pathways";
+  } else if (
+    /work|482|186/i.test(
+      lower
+    )
+  ) {
+    migration_intent_summary =
+      "work visa";
+  } else if (
+    /student/i.test(
+      lower
+    )
+  ) {
+    migration_intent_summary =
+      "student visa";
+  } else if (
+    /visitor|600/i.test(
+      lower
+    )
+  ) {
+    migration_intent_summary =
+      "visitor visa";
   }
 
-  /* ==========================
+  /* -------------------------
      NEXT STEP
-  ========================== */
+  ------------------------- */
 
   let next_step_taken =
     "";
 
   if (
-    /(callback|call back|free callback|call me back)/i.test(
+    /callback|free callback/i.test(
       lower
     )
   ) {
     next_step_taken =
-      "callback";
+      "free_callback";
   }
 
   if (
-    /(paid consultation|consultation|payment)/i.test(
+    /paid consultation|payment|paid/i.test(
       lower
     )
   ) {
     next_step_taken =
-      "consultation";
+      "paid_consultation";
   }
-
-  /* ==========================
-     VALIDATE LEAD
-  ========================== */
 
   const hasLead =
     client_name ||
