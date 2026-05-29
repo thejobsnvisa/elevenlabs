@@ -139,15 +139,6 @@ function extractData(text) {
       "existing_client";
   }
 
-  if (
-    /new client|first time/i.test(
-      lower
-    )
-  ) {
-    client_type =
-      "new_client";
-  }
-
   /* -------------------------
      NAME
   ------------------------- */
