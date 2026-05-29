@@ -173,10 +173,10 @@ function extractData(text) {
 
   const patterns = [
     /my name is\s+([a-z ]+)/i,
-    /i am\s+([a-z]+)/i,
-    /this is\s+([a-z]+)/i,
-    /name\s*:\s*([a-z]+)/i,
-    /name is\s+([a-z]+)/i,
+    /i am\s+([a-z ]+)/i,
+    /this is\s+([a-z ]+)/i,
+    /name\s*:\s*([a-z ]+)/i,
+    /name is\s+([a-z ]+)/i,
   ];
 
   for (const pattern of patterns) {
