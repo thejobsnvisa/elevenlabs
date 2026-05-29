@@ -143,173 +143,151 @@ function extractData(text) {
     }
   }
 
-  /* -------------------------
-     CLIENT TYPE
-  ------------------------- */
+/* -------------------------
+   CLIENT TYPE
+------------------------- */
 
-  let client_type =
+let client_type =
+  "new_client";
+
+if (
+  /existing client|existing case|already applied|follow up|returning client/i.test(
+    lower
+  )
+) {
+  client_type =
+    "existing_client";
+}
+
+if (
+  /new client|first time/i.test(
+    lower
+  )
+) {
+  client_type =
     "new_client";
+}
 
-  if (
-    /existing|already applied|follow up|returning|old client|existing case/i.test(
-      lower
-    )
-  ) {
-    client_type =
-      "existing_client";
-  }
+/* -------------------------
+   NAME
+------------------------- */
 
-  /* -------------------------
-     NAME
-  ------------------------- */
+let client_name =
+  "";
 
-  let client_name =
-    "";
+const namePatterns = [
+  // name (Riddhi Upadhyay)
+  /name\s*\(([^)]+)\)/i,
 
-  const patterns = [
-    /my name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /i am\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /this is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /name\s*:\s*([a-z]+(?:\s[a-z]+){0,3})/i,
-    /name is\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+  // my name is riddhi
+  /my name is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
 
-    // transcript summary support
-    /the user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
-    /user[,]?\s+([a-z]+(?:\s[a-z]+){0,3})/i,
+  // i am riddhi
+  /i am\s+([a-z]+(?:\s[a-z]+){0,2})/i,
 
-    // "Ajay Gaur from India"
-    /([a-z]+(?:\s[a-z]+){1,3})\s+from\s+[a-z]+/i,
-  ];
+  // this is riddhi
+  /this is\s+([a-z]+(?:\s[a-z]+){0,2})/i,
 
-  for (const pattern of patterns) {
-    const match =
-      text.match(pattern);
+  // user riddhi upadhyay
+  /user[,:\s]+([a-z]+(?:\s[a-z]+){0,2})/i,
+];
 
-    if (match?.[1]) {
-      const candidate =
-        match[1]
-          .trim()
-          .replace(
-            /\s+/g,
-            " "
-          );
+for (const pattern of namePatterns) {
+  const match =
+    text.match(pattern);
 
-      const invalid =
-        candidate
-          .toLowerCase()
-          .split(" ")
-          .some(word =>
-            ignoreWords.includes(
-              word
-            )
-          );
-
-      if (
-        candidate.length >
-          2 &&
-        !invalid
-      ) {
-        client_name =
-          candidate;
-        break;
-      }
-    }
-  }
-
-  /* fallback from email */
-
-  if (
-    !client_name &&
-    client_email
-  ) {
+  if (match?.[1]) {
     client_name =
-      client_email
-        .split("@")[0]
+      match[1]
+        .trim()
         .replace(
-          /[0-9._-]/g,
+          /\s+/g,
           " "
         );
+
+    break;
   }
+}
 
-  /* capitalize */
+/* capitalize */
 
-  client_name =
-    client_name
-      .split(" ")
-      .filter(Boolean)
-      .map(
-        word =>
-          word.charAt(
-            0
-          )
-            .toUpperCase() +
-          word
-            .slice(1)
-            .toLowerCase()
-      )
-      .join(" ");
-
-  /* -------------------------
-     COUNTRY
-  ------------------------- */
-
-  let caller_country =
-    "";
-
-  const countryMatch =
-    text.match(
-      /\bfrom\s+([a-z\s]+?)(?:[.,]|$|\s(?:for|to|and))/i
-    );
-
-  if (countryMatch?.[1]) {
-    caller_country =
-      countryMatch[1]
-        .trim()
-        .toLowerCase();
-  }
-
-  /* -------------------------
-     MIGRATION SUMMARY
-  ------------------------- */
-
-  let migration_intent_summary =
-    "";
-
-  const migrationMatch =
-    text.match(
-      /(looking for|seeking|interested in|want|need|applying for|regarding)\s+(.+?)(?:[.,]|$)/i
-    );
-
-  if (migrationMatch?.[2]) {
-    migration_intent_summary =
-      migrationMatch[2]
-        .trim();
-  }
-
-  /* -------------------------
-     NEXT STEP
-  ------------------------- */
-
-  let next_step_taken =
-    "";
-
-  if (
-    /callback|call back|call me back|free callback/i.test(
-      lower
+client_name =
+  client_name
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      word =>
+        word.charAt(0)
+          .toUpperCase() +
+        word
+          .slice(1)
+          .toLowerCase()
     )
-  ) {
-    next_step_taken =
-      "free_callback";
-  }
+    .join(" ");
 
-  if (
-    /paid consultation|consultation|payment|paid/i.test(
-      lower
-    )
-  ) {
-    next_step_taken =
-      "paid_consultation";
-  }
+/* -------------------------
+   COUNTRY
+------------------------- */
+
+let caller_country =
+  "";
+
+const countryMatch =
+  text.match(
+    /from\s+([A-Za-z\s]+?)(?:[.,]|$|\s(?:seeking|contacted|for))/i
+  );
+
+if (countryMatch?.[1]) {
+  caller_country =
+    countryMatch[1]
+      .trim()
+      .toLowerCase();
+}
+
+/* -------------------------
+   MIGRATION SUMMARY
+------------------------- */
+
+let migration_intent_summary =
+  "";
+
+const visaMatch =
+  text.match(
+    /(visitor visa|student visa|work visa|tourist visa|dependent visa|pr|permanent residency)/i
+  );
+
+if (visaMatch?.[1]) {
+  migration_intent_summary =
+    visaMatch[1]
+      .trim()
+      .toLowerCase();
+}
+
+/* -------------------------
+   NEXT STEP
+------------------------- */
+
+let next_step_taken =
+  "";
+
+if (
+  /free callback|callback|call back|call me back/i.test(
+    lower
+  )
+) {
+  next_step_taken =
+    "free_callback";
+}
+
+if (
+  /paid consultation|payment|paid/i.test(
+    lower
+  )
+) {
+  next_step_taken =
+    "paid_consultation";
+}
+
 
   const hasLead =
     client_name ||
