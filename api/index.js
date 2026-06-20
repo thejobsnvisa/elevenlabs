@@ -52,6 +52,13 @@ const auth =
     ],
   });
 
+function formatDate(date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 /* ===========================
    EXTRACT DATA
 =========================== */
@@ -61,6 +68,9 @@ function extractData(text) {
 
   const lower =
     text.toLowerCase();
+
+  const extraction_date =
+    formatDate(new Date());
 
   /* -------------------------
      EMAIL
@@ -318,6 +328,7 @@ function extractData(text) {
     migration_intent_summary,
     next_step_taken,
     caller_country,
+    date: extraction_date,
   };
 }
 
@@ -353,6 +364,8 @@ async function appendToSheet(
         "",
       data.caller_country ||
         "",
+      data.date ||
+        "",
     ]];
 
     await sheets.spreadsheets.values.append(
@@ -360,7 +373,7 @@ async function appendToSheet(
         spreadsheetId:
           SHEET_ID,
         range:
-          "Sheet1!A2:G",
+          "Sheet1!A2:H",
         valueInputOption:
           "USER_ENTERED",
         insertDataOption:
@@ -455,6 +468,10 @@ module.exports =
           caller_country:
             body.caller_country ||
             "",
+
+          date:
+            body.date ||
+            formatDate(new Date()),
         };
       }
 
