@@ -141,7 +141,7 @@ function extractData(text) {
     "new_client";
 
   if (
-    /existing client|existing case|already applied|follow up|returning client/i.test(
+    /existing client|existing case|already applied|follow(?:[-\s]up)|returning client|already have a case|worked with you|with you before|existing customer/i.test(
       lower
     )
   ) {
